@@ -1,9 +1,11 @@
-"""Backend orchestration — single entry point answer_question(). Hard-coded for Step 1.2."""
+"""Backend orchestration — single entry point answer_question(). Wired to Groq in Step 1.3."""
 
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+
+from backend.llm import chat
 
 
 @dataclass
@@ -15,14 +17,9 @@ class Response:
     fallback_reason: str | None = None
 
 
-PLACEHOLDER_ANSWER = (
-    "(placeholder) Orchestration is wired but no LLM, persona, or retrieval is "
-    "connected yet — see Steps 1.3, 1.6, and the Day-15 RAG convergence."
-)
-
-
 def answer_question(text: str, history: list[dict] | None = None) -> Response:
     start = time.perf_counter()
-    answer = PLACEHOLDER_ANSWER
+    messages = (history or []) + [{"role": "user", "content": text}]
+    answer = chat(messages)
     latency_ms = (time.perf_counter() - start) * 1000
     return Response(text=answer, latency_ms=latency_ms)
