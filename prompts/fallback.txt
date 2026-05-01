@@ -1,4 +1,3 @@
-[Approved FLP referral language placeholder — owned by Jacob (OD-8).
+That is a meaningful question, but it is not covered by the materials I have available. For a fuller answer, please reach out to the Foundation for Liberty and Prosperity directly.
 
-Used when retrieval confidence is below threshold, the question is off-topic,
-or the system otherwise cannot answer from the corpus. Never improvise.]
+(Placeholder fallback language — to be replaced with FLP-approved wording per Open Decision OD-8, owned by Jacob Barbosa.)
