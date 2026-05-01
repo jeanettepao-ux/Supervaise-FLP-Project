@@ -17,6 +17,9 @@ chroma_db/
 logs/
 *.mp3
 
+# Downloaded ML models (faster-whisper, etc.) — too large for git
+models/
+
 # Source materials (FLP-delivered, not committed)
 source_materials/
 
