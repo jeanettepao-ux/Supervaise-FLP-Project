@@ -1,0 +1,4 @@
+[Approved FLP referral language placeholder — owned by Jacob (OD-8).
+
+Used when retrieval confidence is below threshold, the question is off-topic,
+or the system otherwise cannot answer from the corpus. Never improvise.]

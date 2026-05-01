@@ -1,0 +1,31 @@
+# Secrets
+.env
+
+# Virtual environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Project data (gitignored per Appendix B)
+chroma_db/
+logs/
+*.mp3
+
+# Source materials (FLP-delivered, not committed)
+source_materials/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

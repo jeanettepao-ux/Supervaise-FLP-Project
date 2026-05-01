@@ -1,0 +1,5 @@
+[Step 1.6 — system prompt placeholder.
+
+Will contain the CJ Panganiban persona description, the 100–150 word response limit,
+the English-only output rule, the source-grounded rule, and the refer-on-miss rule.
+Persona decisions OD-1/2/3 (Section 8 of HANDOVER.md) will land here.]
