@@ -57,6 +57,16 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-05 · Bugfix · `torchvision` added to fix Streamlit startup crash
+
+User reported a browser error on `http://localhost:8501`: `TypeError: Failed to fetch dynamically imported module` for both `AudioInput.*.js` and `ChatInput.*.js`. Terminal showed `ModuleNotFoundError: No module named 'torchvision'` from `transformers/models/aria/image_processing_aria.py` at line 21. Root cause: `transformers` (transitive dep of `sentence-transformers`) eagerly imports its `aria` image processor at startup, which requires `torchvision`. We had `torch` but not `torchvision`. The browser errors were a downstream effect — the crashed Streamlit server couldn't serve the static JS bundles.
+
+Fix: `pip install torchvision` (pulled `torchvision==0.26.0`, ~4 MB wheel, reuses existing `torch==2.11.0`). `requirements.txt` re-pinned. Streamlit now boots in ~5s with no errors.
+
+### 2026-05-04 · `34c1531` · Add `PROGRESS.md` build journal + per-push update rule
+
+Created this file. Sitrep at the top shows full Track 1 / Track 2 status; per-push history below logs each commit going forward. CLAUDE.md updated with the rule: every push to GitHub adds an entry to PROGRESS.md.
+
 ### 2026-05-04 · `5cf96d7` · Phase A scope refinement: audio ingestion deferred to Phase B
 
 Documentation-only. The original Week 3 task list put MP3/M4A/MP4 corpus ingestion in Phase A. User moved it to Phase B (OpenAI cutover). Phase A loaders now target PDF/TXT/MD only. Note: faster-whisper for *visitor mic input* stays in Phase A; it's the *corpus-side* audio transcription that's deferred.
