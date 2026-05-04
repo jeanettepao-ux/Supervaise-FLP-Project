@@ -1,0 +1,14 @@
+# Streamlit config (committed; applies to anyone cloning the repo).
+
+[server]
+# Disable the file watcher. On Windows + a heavy dep tree (torch +
+# torchvision + transformers + sentence-transformers + faster-whisper),
+# watchdog dies trying to watch thousands of site-packages files, which
+# causes Streamlit to shut down silently a few seconds after boot.
+# Tradeoff: no hot-reload on file save. Stop and re-run streamlit to
+# pick up code changes.
+fileWatcherType = "none"
+
+[browser]
+# Disable telemetry pings (cleaner terminal output).
+gatherUsageStats = false

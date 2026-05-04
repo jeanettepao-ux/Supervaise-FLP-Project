@@ -57,6 +57,14 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-05 · Bugfix · disable Streamlit file watcher (Windows + heavy deps)
+
+User reported: Streamlit boots cleanly, prints "You can now view…" and the Local URL line, but then exits silently back to the shell prompt 10-20 seconds later with no traceback — only a `[transformers] Accessing __path__` deprecation warning visible. Browser shows "Connection error: Is Streamlit still running?".
+
+Root cause: Streamlit's default file watcher (`watchdog` via `auto` mode) walks every imported module's source files. With `torch + torchvision + transformers + sentence-transformers + faster-whisper`, that's thousands of files under `.venv\Lib\site-packages`. On Windows the watcher thread dies hitting file-handle / watch-path limits; Streamlit treats a dead watcher as "user wants to stop" and shuts down gracefully without printing why.
+
+Fix: created `.streamlit/config.toml` with `fileWatcherType = "none"` (committed, applies for anyone cloning the repo). Also disabled telemetry. Tradeoff: no hot-reload on save — stop and re-run `streamlit run app.py` to pick up code changes. Acceptable for this project's workflow.
+
 ### 2026-05-05 · Bugfix · `torchvision` added to fix Streamlit startup crash
 
 User reported a browser error on `http://localhost:8501`: `TypeError: Failed to fetch dynamically imported module` for both `AudioInput.*.js` and `ChatInput.*.js`. Terminal showed `ModuleNotFoundError: No module named 'torchvision'` from `transformers/models/aria/image_processing_aria.py` at line 21. Root cause: `transformers` (transitive dep of `sentence-transformers`) eagerly imports its `aria` image processor at startup, which requires `torchvision`. We had `torch` but not `torchvision`. The browser errors were a downstream effect — the crashed Streamlit server couldn't serve the static JS bundles.
