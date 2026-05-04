@@ -1,20 +1,36 @@
 import streamlit as st
 
+from backend.adapters import WebAdapter
 from backend.orchestrator import answer_question
+from backend.stt import transcribe
+from backend.tts import synthesize
 
 st.set_page_config(page_title="CJ Panganiban - May 30 Demo", layout="centered")
 st.title("CJ Panganiban - May 30 Demo")
 st.caption(
-    "Pre-prototype. Answers are not yet source-grounded - "
+    "Pre-prototype. Voice in / voice out. Answers are not yet source-grounded - "
     "RAG retrieval arrives at the Day-15 convergence."
 )
 
 if "history" not in st.session_state:
     st.session_state.history = []
+if "last_audio_key" not in st.session_state:
+    st.session_state.last_audio_key = None
+
+adapter = WebAdapter()
 
 
-def _render_assistant(content: str, meta: dict) -> None:
-    st.write(content)
+@st.cache_data(show_spinner=False)
+def _transcribe_audio(audio_bytes: bytes) -> str:
+    return transcribe(audio_bytes)
+
+
+@st.cache_data(show_spinner=False)
+def _synthesize_cached(text: str) -> bytes:
+    return synthesize(text)
+
+
+def _render_meta(meta: dict) -> None:
     citations = meta.get("citations") or []
     if citations:
         with st.expander(f"Sources ({len(citations)})"):
@@ -29,15 +45,34 @@ def _render_assistant(content: str, meta: dict) -> None:
     st.caption(f"Latency: {meta['latency_ms']:.0f} ms")
 
 
+# Render existing history (no autoplay on past turns)
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
+        st.write(turn["content"])
         if turn["role"] == "assistant":
-            _render_assistant(turn["content"], turn["meta"])
-        else:
-            st.write(turn["content"])
+            try:
+                st.audio(_synthesize_cached(turn["content"]), format="audio/mp3")
+            except Exception:
+                pass
+            _render_meta(turn["meta"])
 
+# Inputs: voice (primary) + text fallback
+st.divider()
+audio_input = st.audio_input("Record your question:")
+typed_question = st.chat_input("...or type it (fallback)")
 
-if question := st.chat_input("Ask CJ a question..."):
+question: str | None = None
+if audio_input is not None:
+    audio_bytes = audio_input.getvalue()
+    audio_key = hash(audio_bytes)
+    if audio_key != st.session_state.last_audio_key:
+        with st.spinner("Transcribing..."):
+            question = _transcribe_audio(audio_bytes)
+        st.session_state.last_audio_key = audio_key
+elif typed_question:
+    question = typed_question
+
+if question:
     st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.write(question)
@@ -55,7 +90,8 @@ if question := st.chat_input("Ask CJ a question..."):
             "fallback": response.fallback,
             "fallback_reason": response.fallback_reason,
         }
-        _render_assistant(response.text, meta)
+        adapter.speak(response.text, autoplay=True)
+        _render_meta(meta)
 
     st.session_state.history.append(
         {"role": "assistant", "content": response.text, "meta": meta}
