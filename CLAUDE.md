@@ -53,7 +53,7 @@ cjp-demo/
 ├── prompts/
 │   ├── instructions.txt             # system prompt (persona, rules)
 │   └── fallback.txt                 # approved referral language (from Jacob)
-├── source_materials/                # FLP-delivered files (PDF/TXT/MD/MP3/M4A/MP4)
+├── source_materials/                # FLP-delivered files (Phase A: PDF/TXT/MD only; audio deferred to Phase B)
 ├── models/                          # local ML model cache (faster-whisper, etc.)
 ├── chroma_db/                       # persisted vector store (gitignored)
 └── logs/
@@ -78,14 +78,24 @@ Even in the web demo, the I/O surface goes through a `RobotAdapter` interface. M
 Hardware, FastAPI, PostgreSQL/pgvector, OpenAI services, voice cloning, wake-word, separate operator UI, cloud hosting, R-Pi edge TTS optimization, comprehensive corpus build.
 
 ## Source materials handling
-FLP delivers files (PDF / TXT / MD / MP3 / M4A / MP4) into `source_materials/`. Audio recordings go through faster-whisper to text before ingestion. OCR for scanned PDFs is a known need; technique research is on the Phase A task list.
 
-**Audio is ingestion-only — never replayed to the visitor.** The pipeline is one-way:
+**Phase A (now, on Groq) — text sources only.** FLP delivers PDF / TXT / MD into `source_materials/`. Build loaders, chunking, embedding, and retrieval against this. OCR for scanned PDFs is a known need; technique research is on the Phase A task list.
 
-- INGESTION: MP3 / M4A / MP4 → faster-whisper → text → embeddings → ChromaDB
-- INFERENCE: question → retrieve text chunks → Groq generates text answer → gTTS speaks the text answer
+**Phase B (OpenAI cutover) — add audio sources.** MP3 / M4A / MP4 ingestion (CJ's recordings → faster-whisper → text → embeddings → ChromaDB) is deferred to Phase B. Do NOT build the audio ingestion pipeline during Phase A.
+
+**Audio is one-way and ingestion-only — never replayed to the visitor.** When the pipeline ships in Phase B:
+
+- INGESTION (Phase B): MP3 / M4A / MP4 → faster-whisper → text → embeddings → ChromaDB
+- INFERENCE (now): question → retrieve text chunks → Groq generates text answer → gTTS speaks the text answer
 
 CJ's actual recorded audio is never sent back to the visitor as output. Only the synthesized "normal voice" reads the textual answer aloud.
+
+**Note on faster-whisper usage:** Two distinct uses, only one in Phase A.
+
+| Use | Phase | Status |
+|---|---|---|
+| Visitor mic → text (STT for demo input) | Phase A | live |
+| CJ's audio recordings → text (corpus ingestion) | Phase B | deferred |
 
 ## OD-2 — voice cloning vs neutral TTS (decided for May 30)
 **Decided: neutral TTS** (gTTS for now). No voice cloning of CJ for the May 30 demo. Re-opens post-demo if FLP wants a more realistic voice for the September showcase.
