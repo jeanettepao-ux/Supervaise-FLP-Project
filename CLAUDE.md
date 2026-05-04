@@ -100,5 +100,8 @@ CJ's actual recorded audio is never sent back to the visitor as output. Only the
 ## OD-2 — voice cloning vs neutral TTS (decided for May 30)
 **Decided: neutral TTS** (gTTS for now). No voice cloning of CJ for the May 30 demo. Re-opens post-demo if FLP wants a more realistic voice for the September showcase.
 
+## Build journal — `PROGRESS.md`
+Every push to GitHub adds an entry to [PROGRESS.md](PROGRESS.md) summarizing what was built and why. Update PROGRESS.md as part of every commit before pushing — same flow as the commit message but persisted in the repo for the team.
+
 ## Full context
 See [HANDOVER.md](HANDOVER.md) for the complete 10-section spec, two-track build plan, open decisions, team ownership, and post-demo migration path.
