@@ -80,5 +80,15 @@ Hardware, FastAPI, PostgreSQL/pgvector, OpenAI services, voice cloning, wake-wor
 ## Source materials handling
 FLP delivers files (PDF / TXT / MD / MP3 / M4A / MP4) into `source_materials/`. Audio recordings go through faster-whisper to text before ingestion. OCR for scanned PDFs is a known need; technique research is on the Phase A task list.
 
+**Audio is ingestion-only — never replayed to the visitor.** The pipeline is one-way:
+
+- INGESTION: MP3 / M4A / MP4 → faster-whisper → text → embeddings → ChromaDB
+- INFERENCE: question → retrieve text chunks → Groq generates text answer → gTTS speaks the text answer
+
+CJ's actual recorded audio is never sent back to the visitor as output. Only the synthesized "normal voice" reads the textual answer aloud.
+
+## OD-2 — voice cloning vs neutral TTS (decided for May 30)
+**Decided: neutral TTS** (gTTS for now). No voice cloning of CJ for the May 30 demo. Re-opens post-demo if FLP wants a more realistic voice for the September showcase.
+
 ## Full context
 See [HANDOVER.md](HANDOVER.md) for the complete 10-section spec, two-track build plan, open decisions, team ownership, and post-demo migration path.
