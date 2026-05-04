@@ -9,11 +9,11 @@ How to read this file:
 
 ---
 
-## Sitrep — 2026-05-04
+## Sitrep — 2026-05-05
 
 ### What's working end-to-end right now
 
-A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo" Streamlit chat page, can either click the mic to record a question or type one in the text fallback. Their voice gets transcribed locally by faster-whisper, the question is sent through the backend orchestrator (which prepends the CJ persona system prompt) to Groq's `llama-3.3-70b-versatile` model, the answer comes back, gets read aloud by gTTS, and renders in the chat with placeholders for citations, latency, and a fallback warning indicator. Conversation history persists across reruns.
+A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo" Streamlit chat page, can either click the mic to record a question or type one in the text fallback. Their voice gets transcribed locally by faster-whisper, the question is sent through the backend orchestrator (which prepends the CJ persona system prompt with a randomly-picked fallback variant) to Groq's `llama-3.3-70b-versatile` model, the answer comes back, gets read aloud by **edge-tts** (default `en-US-AndrewNeural` — US male voice, configurable via env), and renders in the chat with placeholders for citations, latency, and a fallback warning indicator. Conversation history persists across reruns. Streamlit's file watcher is disabled via `.streamlit/config.toml` so the heavy dep tree doesn't crash the server on Windows.
 
 ### What's actually built (Phase A — May 30 demo)
 
@@ -26,7 +26,7 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 | 1.5 Chat UI: history, citation panel, latency, fallback indicator | done | `app.py` |
 | 1.6 Persona system prompt + fallback text loader | done | `backend/prompts.py`, `prompts/instructions.txt`, `prompts/fallback.txt` |
 | 1.7 `RobotAdapter` Protocol + `WebAdapter` | done | `backend/adapters.py` |
-| 1.8 TTS via gTTS (free cloud) | done | `backend/tts.py` |
+| 1.8 TTS via edge-tts (free cloud, male voice) | done | `backend/tts.py`, `.streamlit/config.toml` |
 | 1.9 Trigger-word interrupt + 5-min conversation window | NOT STARTED | — |
 | 1.10 Structured JSON logging to `logs/turns.jsonl` | NOT STARTED | `backend/logger.py` (placeholder only) |
 
@@ -57,7 +57,7 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-05 · Feature · male TTS voice (edge-tts) + 5 fallback variants
+### 2026-05-05 · `5f1bc1c` · male TTS voice (edge-tts) + 5 fallback variants
 
 User confirmed STT and TTS now work end-to-end in the browser. Two requested changes:
 
@@ -67,7 +67,7 @@ User confirmed STT and TTS now work end-to-end in the browser. Two requested cha
 
 Test: 5 variants loaded, all 5 reached across 10 random picks. edge-tts produced 29 KB mp3 with the male voice on a sample sentence. `gTTS` left in `requirements.txt` in case we need to switch back.
 
-### 2026-05-05 · Bugfix · disable Streamlit file watcher (Windows + heavy deps)
+### 2026-05-05 · `828e040` · disable Streamlit file watcher (Windows + heavy deps)
 
 User reported: Streamlit boots cleanly, prints "You can now view…" and the Local URL line, but then exits silently back to the shell prompt 10-20 seconds later with no traceback — only a `[transformers] Accessing __path__` deprecation warning visible. Browser shows "Connection error: Is Streamlit still running?".
 
@@ -75,7 +75,7 @@ Root cause: Streamlit's default file watcher (`watchdog` via `auto` mode) walks 
 
 Fix: created `.streamlit/config.toml` with `fileWatcherType = "none"` (committed, applies for anyone cloning the repo). Also disabled telemetry. Tradeoff: no hot-reload on save — stop and re-run `streamlit run app.py` to pick up code changes. Acceptable for this project's workflow.
 
-### 2026-05-05 · Bugfix · `torchvision` added to fix Streamlit startup crash
+### 2026-05-05 · `330e86d` · `torchvision` added to fix Streamlit startup crash
 
 User reported a browser error on `http://localhost:8501`: `TypeError: Failed to fetch dynamically imported module` for both `AudioInput.*.js` and `ChatInput.*.js`. Terminal showed `ModuleNotFoundError: No module named 'torchvision'` from `transformers/models/aria/image_processing_aria.py` at line 21. Root cause: `transformers` (transitive dep of `sentence-transformers`) eagerly imports its `aria` image processor at startup, which requires `torchvision`. We had `torch` but not `torchvision`. The browser errors were a downstream effect — the crashed Streamlit server couldn't serve the static JS bundles.
 
