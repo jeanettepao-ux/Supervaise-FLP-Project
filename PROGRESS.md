@@ -57,6 +57,10 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-05 · `7c211f0` · PROGRESS.md refresh
+
+Self-referential maintenance commit. Sitrep date bumped to 2026-05-05; description rewritten to reflect edge-tts male voice and `.streamlit/config.toml`. Track 1 step 1.8 row updated from "gTTS" to "edge-tts". The three 2026-05-05 entries below now carry their commit hashes to match the older format. No code changes.
+
 ### 2026-05-05 · `5f1bc1c` · male TTS voice (edge-tts) + 5 fallback variants
 
 User confirmed STT and TTS now work end-to-end in the browser. Two requested changes:
