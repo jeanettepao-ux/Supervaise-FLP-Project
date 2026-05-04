@@ -57,6 +57,16 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-05 · Feature · male TTS voice (edge-tts) + 5 fallback variants
+
+User confirmed STT and TTS now work end-to-end in the browser. Two requested changes:
+
+- **Voice gender:** gTTS uses Google's translate-tts which is locked to a single (female) voice per language. Switched to `edge-tts` (Microsoft Edge's TTS — free, no API key, much higher quality, large voice catalog). Default `TTS_VOICE=en-US-GuyNeural` (US male, gravitas-leaning); configurable via env. Other male English options documented in `backend/tts.py` and `.env.example`. Run `edge-tts --list-voices` for the full catalog.
+- **Fallback variants:** `prompts/fallback.txt` now has 5 variant phrasings separated by `---`. `backend/prompts.py` parses them and `fallback()` picks a random variant per call. `system_prompt()` substitutes a freshly-picked variant into the persona prompt on each Groq call (was previously @lru_cached with one fixed variant).
+- All variants still placeholders for Jacob to revise per OD-8.
+
+Test: 5 variants loaded, all 5 reached across 10 random picks. edge-tts produced 29 KB mp3 with the male voice on a sample sentence. `gTTS` left in `requirements.txt` in case we need to switch back.
+
 ### 2026-05-05 · Bugfix · disable Streamlit file watcher (Windows + heavy deps)
 
 User reported: Streamlit boots cleanly, prints "You can now view…" and the Local URL line, but then exits silently back to the shell prompt 10-20 seconds later with no traceback — only a `[transformers] Accessing __path__` deprecation warning visible. Browser shows "Connection error: Is Streamlit still running?".

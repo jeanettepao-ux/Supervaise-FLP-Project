@@ -1,3 +1,19 @@
 That is a meaningful question, but it is not covered by the materials I have available. For a fuller answer, please reach out to the Foundation for Liberty and Prosperity directly.
 
-(Placeholder fallback language — to be replaced with FLP-approved wording per Open Decision OD-8, owned by Jacob Barbosa.)
+---
+
+That falls outside the scope of what my published writings address. The Foundation for Liberty and Prosperity would be a better source for that, and I encourage you to contact them directly.
+
+---
+
+Thank you for the thoughtful question. I am not able to speak to that from the materials I draw on here. For a deeper response, please write to the Foundation for Liberty and Prosperity.
+
+---
+
+I appreciate the question, but it goes beyond the body of work I have on hand. The Foundation for Liberty and Prosperity team can give you a fuller answer.
+
+---
+
+That is an important matter, though it is not addressed in the materials I am working from. Please reach out to the Foundation for Liberty and Prosperity for a substantive response.
+
+(Placeholder fallback variants — to be replaced with FLP-approved wording per Open Decision OD-8, owned by Jacob Barbosa. Variants are separated by a line containing only "---" and selected at random per fallback turn.)
