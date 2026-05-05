@@ -35,9 +35,19 @@ def _render_meta(meta: dict) -> None:
     if citations:
         with st.expander(f"Sources ({len(citations)})"):
             for c in citations:
-                st.caption(str(c))
+                if isinstance(c, dict):
+                    safe_tag = "" if c.get("citation_safe", True) else " ⚠ unsafe"
+                    line = (
+                        f"**[{c.get('bucket','?')}] {c.get('title','?')}** "
+                        f"({c.get('date','?')}) — distance {c.get('distance','?')}{safe_tag}"
+                    )
+                    if c.get("url"):
+                        line += f"  \n[{c['url']}]({c['url']})"
+                    st.markdown(line)
+                else:
+                    st.caption(str(c))
     else:
-        st.caption("Sources: none yet (retrieval pipeline not wired)")
+        st.caption("Sources: none (retrieval found no chunks above threshold)")
     if meta.get("fallback"):
         st.warning(
             f"Fallback used - {meta.get('fallback_reason') or 'low retrieval confidence'}"

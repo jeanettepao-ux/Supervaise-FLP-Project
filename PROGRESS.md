@@ -57,7 +57,29 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · `acde8f5` follow-up · full ingestion landed: 199 chunks in ChromaDB
+### 2026-05-06 · Day-15 convergence: orchestrator now retrieves before generating
+
+The Streamlit app now answers from CJ's own columns instead of hallucinating from the LLM's training data.
+
+New / changed files:
+- **`backend/retrieval.py`** *(new)* — wraps ChromaDB queries. Top-k=5, cosine distance threshold 0.55 (looser than v2's 0.45 because MiniLM-L6's distances run higher; see threshold note in previous entry), max-2-chunks-per-source diversity guardrail, optional bucket filter, optional `safe_only` (env: `RETRIEVAL_SAFE_ONLY`). Embedder + collection lazy-loaded via `lru_cache`. Returns a list of `RetrievedChunk` dataclasses with text, title, date, url, bucket, distance, citation_safe.
+- **`backend/orchestrator.py`** — `answer_question()` flow rewritten:
+  1. `retrieve(question)`
+  2. If 0 chunks: return random fallback variant (no LLM call, ~30 ms)
+  3. Otherwise: build messages = `[persona, "Provided sources:" + chunks, history, question]`, call Groq, trim to 150 words, return `Response` with citations populated
+- **`app.py`** — citations expander now renders each citation as a markdown line (bucket, title, date, distance, optional URL, optional `⚠ unsafe` tag) instead of raw `str(dict)`.
+
+End-to-end smoke test (3 queries):
+
+| Query | Citations | Latency | Behavior |
+|---|---|---|---|
+| "Tell me about FLP in two sentences" | 5 (A,B,B,D,B) top dist 0.403 | 11.8 s (cold) | Grounded answer; mentions 2011 founding, scholarships, Prosperity Fund — all from chunks |
+| "What did you write about Jovito Salonga?" | 2 (C,C) top dist 0.456 | 1.2 s | In-voice recollection: Far Eastern University, Latin honors, etc. |
+| "How do I bake a chocolate cake?" | 0 | 30 ms | Fallback fired correctly, random variant returned, no LLM call |
+
+Streamlit boot still clean (~9 s).
+
+### 2026-05-06 · `4aa1659` · full ingestion landed: 199 chunks in ChromaDB
 
 After the patches were in, ran `ingest_columns.py` (no `--dry-run`) for the full pipeline:
 
