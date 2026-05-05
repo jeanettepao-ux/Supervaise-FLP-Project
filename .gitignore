@@ -28,6 +28,9 @@ chroma_store/
 kb/raw/
 kb/clean/
 
+# Top-level log files (e.g., dryrun*.log)
+*.log
+
 # IDE / OS
 .vscode/
 .idea/

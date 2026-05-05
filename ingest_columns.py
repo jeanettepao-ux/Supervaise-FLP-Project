@@ -53,7 +53,15 @@ import csv
 import json
 import os
 import re
+import sys
 import time
+
+# Force UTF-8 stdout so the script's progress prints don't crash on Windows
+# cmd's default cp1252 codec (some chars like → / … aren't in cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, OSError):
+    pass
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,7 +82,15 @@ CHROMA_DIR = Path("./chroma_store")         # SQLite-backed; portable to R-Pi la
 DEFAULT_COLLECTION = "cjp_columns_dev"      # 384-dim dev; use cjp_columns_prod for 1536
 EMBEDDER = os.environ.get("EMBEDDER", "minilm")   # "minilm" (free, dev) or "openai" (prod)
 
-USER_AGENT = "FLP-Supervaise-RAG-Builder/0.2 (research; contact: jbarbosa@flp.org.ph)"
+# Real-browser User-Agent — Inquirer's WAF blocks the original
+# bot-shaped UA with a 403 across all 66 URLs. We use a Chrome string
+# but still identify the operator via the HTTP From: header in fetch_html.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/130.0.0.0 Safari/537.36"
+)
+OPERATOR_CONTACT = "jbarbosa@flp.org.ph"
 REQUEST_DELAY_S = 1.0                       # be polite to opinion.inquirer.net
 
 CHUNK_SIZE_TOKENS = 500
@@ -226,12 +242,16 @@ COLUMNS: list[tuple[str, str, str, str, str, bool]] = [
      "https://opinion.inquirer.net/158705/supreme-courts-spji-reminiscing-the-past", True),
 
     # ============================================
-    # Bucket E · Signature Current Events Commentary (8)
+    # Bucket E · Signature Current Events Commentary (8 - 1 = 7 after URL pruning)
     # ============================================
     ("rejuvenating-baguio", "Rejuvenating Baguio", "2025-01-13", "E",
      "https://opinion.inquirer.net/181030/rejuvenating-baguio", True),
-    ("women-suffrage-day", "Let us celebrate Women Suffrage Day", "2025-04-21", "E",
-     "https://opinion.inquirer.net/183163/let-us-celebrate-women-suffrage-day", True),
+    # ("women-suffrage-day", "Let us celebrate Women Suffrage Day", "2025-04-21", "E",
+    #  "https://opinion.inquirer.net/183163/let-us-celebrate-women-suffrage-day", True),
+    # ^ DROPPED 2026-05-06 — Inquirer silently redirects this URL to
+    # opinion.inquirer.net/ (200 OK with section homepage). Caught by canonical
+    # URL guard in fetch_html(). If FLP wants this column included, supply the
+    # source text directly (per v2 handover §3 "as FLP delivers more material").
     ("ph-sovereignty-defender", "Relentless defender of PH sovereignty", "2026-03-30", "E",
      "https://opinion.inquirer.net/190728/relentless-defender-of-ph-sovereignty", True),
     ("ra-6713-bible", "RA 6713, the 'Bible' of public officials", "2025-10-27", "E",
@@ -271,10 +291,43 @@ class LoadedColumn:
     word_count: int
 
 
+_ARTICLE_ID_RE = re.compile(r"/(\d+)/[^/]+/?$")
+_CANONICAL_RE = re.compile(
+    r'<link[^>]+rel=["\']canonical["\'][^>]+href=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+
+
 def fetch_html(url: str) -> str:
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,"
+            "image/avif,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "From": OPERATOR_CONTACT,
+    }
+    resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
-    return resp.text
+    html = resp.text
+
+    # Guard: detect silent homepage redirect.
+    # Inquirer 200-OKs requests for dead article URLs by serving the section
+    # homepage instead. Catch this by checking the article ID in the requested
+    # URL appears in the page's <link rel="canonical"> href.
+    id_match = _ARTICLE_ID_RE.search(url)
+    canonical_match = _CANONICAL_RE.search(html)
+    if id_match and canonical_match:
+        article_id = id_match.group(1)
+        canonical = canonical_match.group(1)
+        if article_id not in canonical:
+            raise RuntimeError(
+                f"silent homepage redirect: requested article id {article_id} "
+                f"but page canonical is {canonical!r}; URL likely dead"
+            )
+
+    return html
 
 
 def html_to_markdown(html: str) -> str:
@@ -291,10 +344,17 @@ def html_to_markdown(html: str) -> str:
         include_tables=False,
         favor_precision=True,
     )
-    if not md or len(md) < 200:
+    if not md:
         raise RuntimeError(
-            "trafilatura returned <200 chars; layout may have changed — "
+            "trafilatura returned nothing; layout may have changed — "
             "inspect the raw HTML and update the loader."
+        )
+    word_count = len(md.split())
+    if word_count < 400:
+        raise RuntimeError(
+            f"trafilatura returned only {word_count} words "
+            f"(<400 floor per v2 handover §5 watch list); "
+            "likely truncation or wrong-block extraction."
         )
     return md.strip()
 

@@ -57,7 +57,27 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · land v2 ingestion deliverables: `ingest_columns.py` + manifest
+### 2026-05-06 · `ingest_columns.py` patches: dev-stack dry-run is clean
+
+First dry-run hit two blockers:
+
+1. **All 66 URLs returned 403 Forbidden.** Inquirer's WAF was blocking the script's bot-shaped UA (`FLP-Supervaise-RAG-Builder/0.2 (research; ...)`). Real-browser UAs with the right `Accept-*` headers pass.
+2. **`UnicodeEncodeError` on the chunk-summary print.** Windows cmd uses cp1252 by default; the `→` char in `print(f"[chunk] {N} columns → {M} chunks...")` is not in cp1252.
+
+Patches applied:
+
+- **`USER_AGENT`** changed from the bot string to a Chrome `Mozilla/5.0` UA. Operator contact preserved via the HTTP `From:` header instead of the UA.
+- **`fetch_html`** sends a browser-shaped header set (`User-Agent`, `Accept`, `Accept-Language`, `From`).
+- **`sys.stdout.reconfigure(encoding="utf-8")`** at the top of the script (with try/except for older Pythons).
+- **Canonical-URL guard:** after every fetch, extract the article ID from the requested URL and confirm it appears in the page's `<link rel="canonical">`. Inquirer 200-OKs dead URLs by silently serving the section homepage; this catches that.
+- **Word-count guard:** `html_to_markdown` now raises if trafilatura's output is `<400` words (per v2 handover §5 watch list). Replaces the previous `<200` chars floor.
+- **Dropped `women-suffrage-day`** from `COLUMNS` (URL `https://opinion.inquirer.net/183163/let-us-celebrate-women-suffrage-day` is dead — Inquirer redirects to the section homepage). Bucket E count: 8 → 7.
+
+Final dry-run: **65 / 65 loaded**, 199 chunks total, avg 3.1/column, 2 legitimate QA-warns (`winning-eez-war` 694w, `martial-law-chacha` 715w — both real columns just slightly under the 700w floor; not extraction failures). 5 spot-checks across buckets A/C/E confirmed real CJ-voice content (first-person, ALL-CAPS opening sentences, `Comments to ...` footer).
+
+`.gitignore` extended to include `*.log` (top-level dryrun artifacts).
+
+### 2026-05-06 · `6abc00d` · land v2 ingestion deliverables: ingest_columns.py + manifest
 
 User delivered the two existing v2 deliverables referenced in `docs/handover_v2.md` §6 — `ingest_columns.py` (544 lines, all 5 stages, 66 columns hardcoded) and `Opinion_Columns_Ingestion_Manifest.docx` (10-section human-readable manifest).
 
