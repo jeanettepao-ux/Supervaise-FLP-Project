@@ -57,6 +57,21 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-06 · `docs/handover_v2.md` · archive v2 handover doc
+
+User delivered an updated CLAUDE.md (handover v2, dated 2026-05-06) with substantially more spec detail — 5-stage pipeline params, 66-column corpus structure, citation-safety (C5) gating, copyright posture. Pushed verbatim to `docs/handover_v2.md` with a leading preamble flagging known reconciliation items vs the working spec (`CLAUDE.md` at repo root).
+
+Conflicts to reconcile in a separate commit (not yet done):
+- Dev embedding model: v2 says MiniLM-L6 (384); current code uses mpnet-base (768)
+- Backend: v2 says FastAPI + Docker; current is Streamlit-direct
+- ChromaDB persist dir: v2 says `./chroma_store/`; current is `./chroma_db/`
+- KB layout: v2 specifies `kb/raw/`, `kb/clean/`, `kb/meta/`; nothing built yet
+- Hardware ETA: v2 says mid-June; HANDOVER.md says late July / early August
+- OpenAI cutover: v2 says locked May 14; we'd been treating as condition-based
+- Confidence threshold: v2 cosine distance > 0.45 vs current similarity < 0.35
+
+Two referenced deliverables (`Opinion_Columns_Ingestion_Manifest.docx`, `ingest_columns.py`) are not in the repo yet — flagged for the user to provide or for us to build from spec.
+
 ### 2026-05-05 · `7c211f0` · PROGRESS.md refresh
 
 Self-referential maintenance commit. Sitrep date bumped to 2026-05-05; description rewritten to reflect edge-tts male voice and `.streamlit/config.toml`. Track 1 step 1.8 row updated from "gTTS" to "edge-tts". The three 2026-05-05 entries below now carry their commit hashes to match the older format. No code changes.
