@@ -23,6 +23,11 @@ models/
 # Source materials (FLP-delivered, not committed)
 source_materials/
 
+# v2 KB pipeline (handover_v2 §7 + §8 copyright posture)
+chroma_store/
+kb/raw/
+kb/clean/
+
 # IDE / OS
 .vscode/
 .idea/

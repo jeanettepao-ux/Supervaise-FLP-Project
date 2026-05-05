@@ -57,7 +57,29 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · `docs/handover_v2.md` · archive v2 handover doc
+### 2026-05-06 · land v2 ingestion deliverables: `ingest_columns.py` + manifest
+
+User delivered the two existing v2 deliverables referenced in `docs/handover_v2.md` §6 — `ingest_columns.py` (544 lines, all 5 stages, 66 columns hardcoded) and `Opinion_Columns_Ingestion_Manifest.docx` (10-section human-readable manifest).
+
+Layout cleanup to align with v2 handover §7:
+
+- `ingest_columns.py` → repo root (already moved by user before this commit).
+- `Opinion_Columns_Ingestion_Manifest.docx` → `docs/`.
+- Removed redundant placeholders: `ingestion/load_and_embed.py`, `ingestion/retrieval_test.py`. The empty `ingestion/` folder is gone.
+
+Dependencies for the script — installed and pinned in `requirements.txt`:
+- `trafilatura==2.0.0` (HTML → markdown extraction)
+- `tiktoken==0.12.0` (cl100k tokenizer for chunk-length measurement)
+- `langchain-text-splitters==1.1.2` (the recursive splitter)
+- `markdownify==1.2.2` (markdown post-processing)
+- `readability-lxml==0.8.4.1` (HTML readability fallback)
+Plus transitive deps (lxml, beautifulsoup4, cssselect, htmldate, courlan, justext, etc.).
+
+`.gitignore` extended per v2 handover §7 + §8 copyright posture: `chroma_store/`, `kb/raw/`, `kb/clean/`. The v2 KB persists to `chroma_store/` (separate from our existing `chroma_db/` in the working spec — they coexist until reconciliation).
+
+Verified: 66 columns in the script's COLUMNS list, 5 citation-unsafe slugs match the v2 §4 inventory exactly. Script not yet executed — that's the next step (probably `--dry-run` first).
+
+### 2026-05-06 · `784a9a6` · archive v2 handover doc
 
 User delivered an updated CLAUDE.md (handover v2, dated 2026-05-06) with substantially more spec detail — 5-stage pipeline params, 66-column corpus structure, citation-safety (C5) gating, copyright posture. Pushed verbatim to `docs/handover_v2.md` with a leading preamble flagging known reconciliation items vs the working spec (`CLAUDE.md` at repo root).
 
