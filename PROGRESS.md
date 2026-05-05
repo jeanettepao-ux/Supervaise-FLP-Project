@@ -57,7 +57,32 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · `ingest_columns.py` patches: dev-stack dry-run is clean
+### 2026-05-06 · `acde8f5` follow-up · full ingestion landed: 199 chunks in ChromaDB
+
+After the patches were in, ran `ingest_columns.py` (no `--dry-run`) for the full pipeline:
+
+- **Stage 1-2 (load + chunk):** 65 / 65 columns OK, 199 chunks total, avg 3.1/column.
+- **Stage 3 (embed):** sentence-transformers `all-MiniLM-L6-v2` downloaded (~90 MB) via huggingface_hub. Windows symlink degradation was a warning only this time (not the hard error we hit with whisper) — files copied instead of symlinked, no patching needed.
+- **Stage 4 (upsert):** ChromaDB collection `cjp_columns_dev` at `./chroma_store/`, cosine space, 199 vectors at 384-dim.
+
+**Smoke test — 6 queries (5 in-scope + 1 deliberately out-of-scope):**
+
+| Expected bucket | Query | Top-1 hit | Top-1 distance |
+|---|---|---|---|
+| D | "What is FLP's mission?" | D · *FLP expanding into prosperity* | 0.442 |
+| A | "Rule of law in West PH Sea?" | A · *WPS is ours* | **0.339** |
+| C | "Who was Jovito Salonga?" | C · *Jovito R. Salonga, my guru and surrogate father* | 0.537 |
+| B | "Economic prosperity?" | B · *Merging law and economics* | 0.529 |
+| E (or A) | "ICC and the Philippines?" | A · *President Marcos' ICC options* `[unsafe]` | 0.438 |
+| **out-of-scope** | "How do I bake a chocolate cake?" | (would be filtered) | **0.874** |
+
+All 5 in-scope queries returned the correct top-1 hit. Out-of-scope query landed at 0.87+, clearly above any plausible threshold — fallback would fire correctly.
+
+**Threshold note for tuning later:** the v2 spec's distance > 0.45 cutoff is borderline strict for MiniLM-L6. The Salonga (0.537) and prosperity (0.529) queries returned semantically-right top-1 hits but would be filtered out at 0.45 and trigger fallback. Suggest 0.55-0.60 for MiniLM dev; re-tune after OpenAI embedding cutover (different distance distribution).
+
+`.gitignore` simplified: `kb/` (whole folder) instead of `kb/raw/` + `kb/clean/`. The manifest and meta sidecars are reproducible from the script + corpus.
+
+### 2026-05-06 · `acde8f5` · `ingest_columns.py` patches: dev-stack dry-run is clean
 
 First dry-run hit two blockers:
 
