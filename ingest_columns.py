@@ -161,6 +161,14 @@ COLUMNS: list[tuple[str, str, str, str, str, bool]] = [
     ("martial-law-chacha", "Martial law, authoritarian rule and Cha-cha", "2017-10-01", "A",
      "https://opinion.inquirer.net/107543/martial-law-authoritarian-rule-cha-cha", True),
 
+    # --- Non-URL sources in bucket A (books / transcripts / PDFs) ---
+    # Single-slug ingest of the full book; chapter-level granularity isn't
+    # recoverable from the docx (formatting was stripped during PDF->docx
+    # conversion). If finer-grained citations are needed later, source the
+    # original PDF and re-ingest with chapter splitting.
+    ("centenary-of-justice", "A Centenary of Justice", "2001-01-01", "A",
+     "source_materials/A_Centenary_of_Justice.docx", True),
+
     # ============================================
     # Bucket B · Prosperity and Economic Philosophy (7)
     # ============================================
@@ -359,8 +367,29 @@ def html_to_markdown(html: str) -> str:
     return md.strip()
 
 
+def _load_file(path: Path) -> str:
+    """Read a local file (.docx, .txt, .md) and return cleaned text body."""
+    if not path.exists():
+        raise RuntimeError(f"file not found: {path}")
+    suffix = path.suffix.lower()
+    if suffix == ".docx":
+        from langchain_community.document_loaders import Docx2txtLoader
+        body = "\n\n".join(d.page_content for d in Docx2txtLoader(str(path)).load())
+    elif suffix in (".txt", ".md"):
+        body = path.read_text(encoding="utf-8")
+    else:
+        raise RuntimeError(f"unsupported file type: {suffix} (path: {path})")
+    word_count = len(body.split())
+    if word_count < 400:
+        raise RuntimeError(
+            f"file {path.name} returned only {word_count} words "
+            "(<400 floor); likely empty or wrong file."
+        )
+    return body.strip()
+
+
 def load_one(col: tuple) -> LoadedColumn:
-    slug, title, date_iso, bucket, url, citation_safe = col
+    slug, title, date_iso, bucket, source, citation_safe = col
 
     raw_dir = KB_ROOT / "raw" / bucket
     clean_dir = KB_ROOT / "clean" / bucket
@@ -372,29 +401,34 @@ def load_one(col: tuple) -> LoadedColumn:
     clean_path = clean_dir / f"{slug}.md"
     meta_path = meta_dir / f"{slug}.json"
 
-    # Fetch (cache to disk for reproducibility)
-    if not raw_path.exists():
-        html = fetch_html(url)
-        raw_path.write_text(html, encoding="utf-8")
-        time.sleep(REQUEST_DELAY_S)
+    # Source can be a URL (Inquirer column) or a local file path (book / PDF /
+    # transcript). Branch on the prefix.
+    if source.startswith(("http://", "https://")):
+        # Fetch HTML (cache to disk for reproducibility), then trafilatura.
+        if not raw_path.exists():
+            html = fetch_html(source)
+            raw_path.write_text(html, encoding="utf-8")
+            time.sleep(REQUEST_DELAY_S)
+        else:
+            html = raw_path.read_text(encoding="utf-8")
+        body_md = html_to_markdown(html)
     else:
-        html = raw_path.read_text(encoding="utf-8")
+        # Local file source. We do NOT mirror it into kb/raw/ since the file is
+        # already on disk under source_materials/.
+        body_md = _load_file(Path(source))
 
-    # Clean
-    body_md = html_to_markdown(html)
     clean_path.write_text(body_md, encoding="utf-8")
-
     word_count = len(body_md.split())
 
     # Sidecar metadata
     meta = {
         "slug": slug, "title": title, "date_iso": date_iso, "bucket": bucket,
-        "url": url, "citation_safe": citation_safe, "word_count": word_count,
+        "url": source, "citation_safe": citation_safe, "word_count": word_count,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    return LoadedColumn(slug, title, date_iso, bucket, url, citation_safe, body_md, word_count)
+    return LoadedColumn(slug, title, date_iso, bucket, source, citation_safe, body_md, word_count)
 
 
 # =============================================================

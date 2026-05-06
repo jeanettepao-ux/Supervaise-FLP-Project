@@ -25,6 +25,7 @@ ctranslate2==4.7.1
 dataclasses-json==0.6.7
 dateparser==1.4.0
 distro==1.9.0
+docx2txt==0.9
 durationpy==0.10
 edge-tts==7.2.8
 faster-whisper==1.2.1
@@ -110,6 +111,7 @@ Pygments==2.20.0
 PyPika==0.51.1
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
+python-docx==1.2.0
 python-dotenv==1.2.2
 python-multipart==0.0.27
 pytz==2026.2

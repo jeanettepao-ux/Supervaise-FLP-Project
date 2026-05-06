@@ -57,7 +57,28 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · Day-15 convergence: orchestrator now retrieves before generating
+### 2026-05-06 · KB extension · "A Centenary of Justice" (CJ's 2001 SC book) added to corpus
+
+User delivered `A_Centenary_of_Justice.docx` (105k words, ~350-page book on the Philippine Supreme Court's centennial 1901-2001) to extend the corpus. Originally pursued per-Chapter splitting (Option C) but the docx was a PDF→Word conversion that stripped all heading styles — every paragraph is `Normal`, no `Chapter N` markers in the body, chapter titles appear 2-7 times each across TOC + photo-caption sections + cross-references. Reliable per-chapter splitting from this source isn't possible without manual annotation or sourcing the original PDF.
+
+Fell back to **Option A: one slug for the whole book**. Added a small loader extension to `ingest_columns.py`:
+- `_load_file(path)` helper handles `.docx` (via `Docx2txtLoader`) and `.txt`/`.md` (raw read).
+- `load_one()` now branches on `source.startswith(("http://", "https://"))` — URL path uses fetch + trafilatura; file path uses `_load_file` directly. Same word-count guard (<400 = raise) applies to both.
+- New COLUMNS row: `("centenary-of-justice", "A Centenary of Justice", "2001-01-01", "A", "source_materials/A_Centenary_of_Justice.docx", True)`.
+- The docx is copied into the repo's gitignored `source_materials/` (private, never committed per v2 §8 copyright posture).
+
+**Ingestion result:** 66 sources total (was 65 columns + new book), 619 chunks (was 199), book contributes 420 chunks. Bucket A grew from 24 → 25.
+
+**Smoke test** confirms the diversity guardrail is doing its job:
+- Book-relevant queries ("centenary of Supreme Court", "death penalty views") → 2 book chunks per answer (max allowed); top distances 0.288 and 0.438 (book is by far the best match for SC-history topics)
+- Column-relevant queries ("What is FLP?", "Who was Salonga?") → columns still win; book doesn't crack top-k (FLP didn't exist when the 2001 book was written; Salonga is in a dedicated column)
+- Out-of-scope ("chocolate cake") → fallback fires in 36 ms, 0 citations
+
+Failed attempt artifacts cleaned up (`scripts/extract_centenary_chapters.py` — chapter-detector that found 21 markers, all in TOC; the body had no markers because the PDF→docx conversion stripped formatting).
+
+`pip install python-docx docx2txt` (added to `requirements.txt` via `pip freeze`).
+
+### 2026-05-06 · `3fd0105` · Day-15 convergence: orchestrator now retrieves before generating
 
 The Streamlit app now answers from CJ's own columns instead of hallucinating from the LLM's training data.
 
