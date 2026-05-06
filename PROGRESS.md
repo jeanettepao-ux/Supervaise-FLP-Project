@@ -57,7 +57,49 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-06 · KB extension · "A Centenary of Justice" (CJ's 2001 SC book) added to corpus
+### 2026-05-07 · Chapter-level KB for "A Centenary of Justice" (Bounded-within-chapters strategy)
+
+User chose the **bounded-within-chapters** chunking strategy: chunks are ≤500 tokens AND chunks never cross chapter boundaries. Each chunk knows its parent chapter via metadata. Replaces the 2026-05-06 single-slug book ingest.
+
+**Parser (`scripts/extract_chapters_from_pdf.py`):**
+- Loads original PDF (`A CENTENARY OF JUSTICE (3).pdf`) via `pypdf`.
+- Skips front matter / TOC (PDF pages 1-17); body text starts at page 18.
+- For each of 20 chapters, sequential title-search with whitespace-tolerant regex; each chapter must be found AT or AFTER the previous chapter's match (eliminates the false-match cascade we hit in the first attempt).
+- Per-chapter candidate phrases: primary title plus distinctive keywords (e.g., Ch 14 uses `"heinousness"` instead of just `"The Death Penalty"` to avoid Ch 2 cross-references; Ch 15 uses `"indigenous peoples"`; Ch 19 uses `"natural-born citizen"`; Ch 20 uses `"exit poll"`).
+- Slices body text by chapter-start offsets, saves each as `source_materials/centenary_chapters/ch{NN}-{slug}.txt`.
+
+**Result: 20 of 20 chapters detected, in correct sequential order.** Sizes mostly healthy except 3 known imperfections:
+- Ch 2 oversize (27,556 words) — absorbed Part I photo plate captions between Ch 1 body and Ch 3 body. Captions are still real CJ-adjacent content, just attributed to Ch 2.
+- Ch 18 short (1,251 words) — Ch 19 detection might be ~1000 words early.
+- Ch 20 large (18,035 words) — absorbs back matter (index, etc.) to end of file.
+
+These are flagged for later refinement; non-fatal.
+
+**Ingestion changes:**
+- Single `centenary-of-justice` row in `COLUMNS` replaced with 20 chapter rows (`centenary-ch01` through `centenary-ch20`), each pointing at its `.txt` file. Titles like "Centenary, Ch.14: The Death Penalty" surface in citations.
+- `chroma_store/` wiped before re-ingestion (drops stale single-slug chunks).
+
+**State after re-ingestion:**
+| Stat | Before today | After |
+|---|---|---|
+| Sources | 66 (65 columns + 1 book) | **85** (65 columns + 20 chapters) |
+| Total chunks | 619 | **954** |
+| Bucket A | 25 | 44 |
+
+**Smoke test (chapter-level retrieval):**
+- "Estrada v. Desierto" → 2× Ch 13 + 2× Ch 17 + Ch 12 (top dist 0.369)
+- "death penalty in your book" → 2× Ch 14 (top dist 0.471)
+- "Cruz v. Secretary of Environment" → 2× Ch 15 + 2× Ch 19 (top dist 0.428)
+- "live radio/TV trials" → 2× Ch 17 (top dist 0.527)
+- "exit polls" → Ch 20 (with one Ch 2 false-positive at top — photo-caption pollution)
+- "FLP" → all column hits, book correctly stays out (2001 book pre-dates 2011 FLP)
+- Out-of-scope → fallback in 30ms
+
+Diversity guardrail capping at max-2 chunks per source means at chapter granularity, multiple chapters can be represented in one answer (e.g., the Estrada query pulls from Ch 13, Ch 17, AND Ch 12 — exactly the cross-chapter narrative donors would want).
+
+`pypdf` and `pdfplumber` already in requirements.txt from earlier exploration; no new deps. The original `source_materials/A_Centenary_of_Justice.docx` is now redundant but harmless (gitignored).
+
+### 2026-05-06 · `ea693f1` · "A Centenary of Justice" (CJ's 2001 SC book) added to corpus (single slug, superseded today)
 
 User delivered `A_Centenary_of_Justice.docx` (105k words, ~350-page book on the Philippine Supreme Court's centennial 1901-2001) to extend the corpus. Originally pursued per-Chapter splitting (Option C) but the docx was a PDF→Word conversion that stripped all heading styles — every paragraph is `Normal`, no `Chapter N` markers in the body, chapter titles appear 2-7 times each across TOC + photo-caption sections + cross-references. Reliable per-chapter splitting from this source isn't possible without manual annotation or sourcing the original PDF.
 

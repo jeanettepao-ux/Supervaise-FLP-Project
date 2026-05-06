@@ -162,12 +162,51 @@ COLUMNS: list[tuple[str, str, str, str, str, bool]] = [
      "https://opinion.inquirer.net/107543/martial-law-authoritarian-rule-cha-cha", True),
 
     # --- Non-URL sources in bucket A (books / transcripts / PDFs) ---
-    # Single-slug ingest of the full book; chapter-level granularity isn't
-    # recoverable from the docx (formatting was stripped during PDF->docx
-    # conversion). If finer-grained citations are needed later, source the
-    # original PDF and re-ingest with chapter splitting.
-    ("centenary-of-justice", "A Centenary of Justice", "2001-01-01", "A",
-     "source_materials/A_Centenary_of_Justice.docx", True),
+    # 'A Centenary of Justice' (CJ Panganiban, 2001) — split per-chapter via
+    # title-search parser over the source PDF (see scripts/extract_chapters_from_pdf.py).
+    # Each chapter is a separate source so the diversity guardrail (max-2 chunks
+    # per source) operates at chapter granularity, and citations show specific
+    # chapter titles instead of just the book.
+    ("centenary-ch01", "Centenary, Ch.1: A Renaissance in the Judiciary", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch01-a-renaissance-in-the-judiciary.txt", True),
+    ("centenary-ch02", "Centenary, Ch.2: Old Doctrines and New Paradigms", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch02-old-doctrines-and-new-paradigms.txt", True),
+    ("centenary-ch03", "Centenary, Ch.3: Obra Maestra", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch03-obra-maestra.txt", True),
+    ("centenary-ch04", "Centenary, Ch.4: The Supreme Court Centenary and the Academe", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch04-the-supreme-court-centenary-and-the-academe.txt", True),
+    ("centenary-ch05", "Centenary, Ch.5: Mediation, an Old Method with a New Twist", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch05-mediation-an-old-method-with-a-new-twist.txt", True),
+    ("centenary-ch06", "Centenary, Ch.6: A Meaningful Centenary", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch06-a-meaningful-centenary.txt", True),
+    ("centenary-ch07", "Centenary, Ch.7: Employee Participation During the Centenary", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch07-employee-participation-during-the-centenary.txt", True),
+    ("centenary-ch08", "Centenary, Ch.8: The Inspiration of the Judiciary", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch08-the-inspiration-of-the-judiciary.txt", True),
+    ("centenary-ch09", "Centenary, Ch.9: A Benchbook for Judicial Excellence", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch09-a-benchbook-for-judicial-excellence.txt", True),
+    ("centenary-ch10", "Centenary, Ch.10: Ready for the Bio-Age", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch10-ready-for-the-bio-age.txt", True),
+    ("centenary-ch11", "Centenary, Ch.11: E-Values for Lawyers", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch11-e-values-for-lawyers.txt", True),
+    ("centenary-ch12", "Centenary, Ch.12: Even the Supreme Court Needs Public Relations", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch12-even-the-supreme-court-needs-public-relations.txt", True),
+    ("centenary-ch13", "Centenary, Ch.13: Estrada v. Desierto and Estrada", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch13-estrada-v-desierto-and-estrada.txt", True),
+    ("centenary-ch14", "Centenary, Ch.14: The Death Penalty", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch14-the-death-penalty.txt", True),
+    ("centenary-ch15", "Centenary, Ch.15: Cruz v. Secretary of Environment", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch15-cruz-v-secretary-of-environment.txt", True),
+    ("centenary-ch16", "Centenary, Ch.16: Ang Bagong Bayani-OFW Labor", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch16-ang-bagong-bayani-ofw-labor.txt", True),
+    ("centenary-ch17", "Centenary, Ch.17: Perez v. Estrada (Live Radio-TV Coverage)", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch17-perez-v-estrada.txt", True),
+    ("centenary-ch18", "Centenary, Ch.18: Firestone Ceramics v. Court of Appeals", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch18-firestone-ceramics-v-court-of-appeals.txt", True),
+    ("centenary-ch19", "Centenary, Ch.19: Bengson v. House of Representatives", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch19-bengson-v-house-of-representatives.txt", True),
+    ("centenary-ch20", "Centenary, Ch.20: Social Weather Stations v. Comelec", "2001-01-01", "A",
+     "source_materials/centenary_chapters/ch20-social-weather-stations-v-comelec.txt", True),
 
     # ============================================
     # Bucket B · Prosperity and Economic Philosophy (7)
