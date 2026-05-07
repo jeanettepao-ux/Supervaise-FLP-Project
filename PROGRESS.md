@@ -57,7 +57,13 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Piper voice · `en_US-ryan-high` → `en_US-lessac-high`
+### 2026-05-08 · Piper voice fix · `en_US-lessac-high` (female!) → `en_US-bryce-medium`
+
+User caught my mistake: `en_US-lessac-high` is a **female** voice, despite Arthur Lessac being a male voice coach (the Piper dataset was recorded by a female reader of his method). Apologies for the bad recommendation. Switched to **`en_US-bryce-medium`** — verified male, conversational and warm.
+
+Updated `.env.example` voice list with explicit "VERIFIED MALE" labels and a warning note about `lessac-*` and `amy-*` being female despite unisex-sounding names.
+
+### 2026-05-08 · `77d60b5` · Piper voice · `en_US-ryan-high` → `en_US-lessac-high` (REVERTED — was female)
 
 User reported `en_US-ryan-high` sounds flat / not engaging. Switched the default to **`en_US-lessac-high`** — a Piper voice trained on the Arthur Lessac vocal-arts method, with intentionally varied prosody. Sounds more engaged + still formal, better suited to CJ's persona.
 

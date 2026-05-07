@@ -8,13 +8,16 @@ Replaces edge-tts. Piper:
 - Multiple male English voices: ryan, joe, alan, bryce, etc.
 
 Voice configurable via env:
-  TTS_VOICE_PIPER=en_US-lessac-high   (default — engaging, expressive US male)
-Other male options:
+  TTS_VOICE_PIPER=en_US-bryce-medium   (default — conversational US male)
+Other verified MALE options:
   en_GB-alan-medium     formal British, BBC-presenter feel
-  en_US-bryce-medium    warm American male, conversational
   en_US-joe-medium      US male, mid-tone
-  en_US-ryan-high       US male, deep but flat (less expressive)
+  en_US-ryan-high       US male, deep but flat
   en_US-norman-medium   older US male, authoritative
+
+NOTE: en_US-lessac-* and en_US-amy-* are FEMALE despite unisex-sounding
+names — Arthur Lessac was a male voice coach, but the dataset was
+recorded by a female reader.
 
 Output format: 16-bit PCM WAV bytes (audio/wav). Streamlit's st.audio
 plays them natively. The previous edge-tts wrapper returned MP3 bytes —
@@ -35,7 +38,7 @@ from piper import PiperVoice
 
 load_dotenv()
 
-DEFAULT_VOICE = "en_US-lessac-high"
+DEFAULT_VOICE = "en_US-bryce-medium"
 _MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "piper"
 
 
