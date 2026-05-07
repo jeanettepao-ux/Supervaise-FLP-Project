@@ -1,71 +1,99 @@
-"""TTS wrapper around edge-tts. Step 1.8 - free cloud TTS for the May 30 demo.
+"""TTS wrapper around Piper (local neural TTS).
 
-Voice is configurable via env var TTS_VOICE. Defaults to a US male voice
-(en-US-GuyNeural). Other male English options:
-  - en-US-AndrewNeural (friendlier, younger)
-  - en-US-EricNeural (younger)
-  - en-GB-RyanNeural (British)
-  - en-AU-WilliamNeural (Australian)
-Run `edge-tts --list-voices` for the full catalog.
+Replaces edge-tts. Piper:
+- Runs entirely on local CPU. No internet round-trip at runtime.
+- ~30-60 MB ONNX voice model, downloaded once into ./models/piper/.
+- ~real-time speed on a typical laptop CPU.
+- No rate limits, no API keys, no Microsoft endpoint flakiness.
+- Multiple male English voices: ryan, joe, alan, bryce, etc.
 
-Hardening (post-5a58664):
-- Bounded per-attempt timeout so a hung Microsoft endpoint can't freeze a turn.
-- Up to 2 retries with a small linear backoff for transient failures
-  (rate-limit blips, transient network issues, dropped chunks).
-- Raises TTSFailure on giving up. Callers should catch and fall back to
-  text-only for that turn rather than letting the conversation break.
+Voice configurable via env:
+  TTS_VOICE_PIPER=en_US-ryan-high   (default — US male, deep, gravitas)
+Other male options:
+  en_US-ryan-medium     smaller / faster
+  en_US-bryce-medium    different US male
+  en_US-joe-medium      US male, mid-tone
+  en_GB-alan-medium     British male, measured
+
+Output format: 16-bit PCM WAV bytes (audio/wav). Streamlit's st.audio
+plays them natively. The previous edge-tts wrapper returned MP3 bytes —
+callers (WebAdapter, _synthesize_cached) now pass format="audio/wav".
 """
 
 from __future__ import annotations
 
-import asyncio
+import io
 import os
-import time
+import wave
+from functools import lru_cache
+from pathlib import Path
 
-from edge_tts import Communicate
+from dotenv import load_dotenv
+from huggingface_hub import hf_hub_download
+from piper import PiperVoice
 
-DEFAULT_VOICE = "en-US-GuyNeural"
-# Tighter retry config: edge-tts hiccups are intermittent. Better to fall
-# back to text-only quickly than freeze the conversation for 45 seconds.
-# 1 retry × 8s timeout = 16s worst case before the friendly caption shows.
-DEFAULT_RETRIES = 1
-DEFAULT_TIMEOUT = 8.0  # seconds, per attempt
+load_dotenv()
+
+DEFAULT_VOICE = "en_US-ryan-high"
+_MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "piper"
 
 
 class TTSFailure(RuntimeError):
-    """Raised when edge-tts fails after all retries."""
+    """Raised when Piper synthesis fails (e.g., model download failure)."""
 
 
-def synthesize(
-    text: str,
-    voice: str | None = None,
-    *,
-    retries: int = DEFAULT_RETRIES,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> bytes:
-    voice = voice or os.environ.get("TTS_VOICE", DEFAULT_VOICE)
-    last_exc: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            return asyncio.run(_bounded_synthesize(text, voice, timeout))
-        except Exception as e:  # noqa: BLE001 - intentional broad catch for retry
-            last_exc = e
-            if attempt < retries:
-                time.sleep(0.5 * (attempt + 1))  # 0.5s, 1.0s
-    raise TTSFailure(
-        f"edge-tts failed after {retries + 1} attempts: "
-        f"{type(last_exc).__name__}: {last_exc}"
-    ) from last_exc
+def _voice_repo_path(voice_name: str) -> str:
+    """Map a voice name like 'en_US-ryan-high' to its rhasspy/piper-voices
+    repository path: 'en/en_US/ryan/high'."""
+    parts = voice_name.split("-")
+    if len(parts) < 3:
+        raise ValueError(
+            f"voice name {voice_name!r} should be like 'en_US-ryan-high' "
+            "(language_country-speaker-quality)"
+        )
+    full_lang = parts[0]                 # "en_US"
+    lang_short = full_lang.split("_")[0]  # "en"
+    speaker = parts[1]                    # "ryan"
+    quality = "-".join(parts[2:])         # "high" (or e.g. "medium")
+    return f"{lang_short}/{full_lang}/{speaker}/{quality}"
 
 
-async def _bounded_synthesize(text: str, voice: str, timeout: float) -> bytes:
-    return await asyncio.wait_for(_synthesize_async(text, voice), timeout=timeout)
+@lru_cache(maxsize=1)
+def _voice() -> PiperVoice:
+    """Load the Piper voice model. First call downloads the .onnx + .json
+    config from rhasspy/piper-voices into ./models/piper/. Subsequent calls
+    use the lru_cache and the local files."""
+    voice_name = os.environ.get("TTS_VOICE_PIPER", DEFAULT_VOICE)
+    repo_path = _voice_repo_path(voice_name)
+    _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    onnx_path = hf_hub_download(
+        repo_id="rhasspy/piper-voices",
+        filename=f"{repo_path}/{voice_name}.onnx",
+        local_dir=str(_MODELS_DIR),
+    )
+    config_path = hf_hub_download(
+        repo_id="rhasspy/piper-voices",
+        filename=f"{repo_path}/{voice_name}.onnx.json",
+        local_dir=str(_MODELS_DIR),
+    )
+    return PiperVoice.load(onnx_path, config_path=config_path)
 
 
-async def _synthesize_async(text: str, voice: str) -> bytes:
-    communicate = Communicate(text, voice)
-    chunks: list[bytes] = []
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            chunks.append(chunk["data"])
-    return b"".join(chunks)
+def synthesize(text: str, voice: str | None = None) -> bytes:
+    """Synthesize text to 16-bit PCM WAV bytes via Piper. Local, no network
+    call at synthesis time, no retries needed (it doesn't fail on flaky
+    cloud endpoints because there is no cloud endpoint)."""
+    if not text:
+        return b""
+    try:
+        v = _voice()
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav:
+            # synthesize_wav sets channels/sample-rate/sample-width on the
+            # wav file from the voice's config, then writes audio frames.
+            v.synthesize_wav(text, wav)
+        return buf.getvalue()
+    except Exception as e:  # noqa: BLE001
+        raise TTSFailure(
+            f"piper-tts failed: {type(e).__name__}: {e}"
+        ) from e

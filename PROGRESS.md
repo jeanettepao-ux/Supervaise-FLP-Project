@@ -57,7 +57,38 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Strip markdown from RAG responses + tighter TTS timeout
+### 2026-05-08 · TTS swap · edge-tts → Piper (local neural)
+
+User reported repeated `(TTS unavailable: edge-tts failed after N attempts: TimeoutError)` — Microsoft's TTS endpoint is intermittently rate-limiting / dropping connections. Decision was already in place: try Piper next. Done.
+
+**Why Piper:**
+- Runs entirely **local on CPU**. No internet round-trip at synthesis time. No rate limits, no API key, no Microsoft endpoint flakiness.
+- Same architectural pattern as faster-whisper: download a small ONNX model once, load into memory, synthesize fast.
+- Multiple male English voices via `rhasspy/piper-voices` HuggingFace repo.
+- Default: `en_US-ryan-high` (US male, deep, suits CJ's gravitas). Configurable via `TTS_VOICE_PIPER` env.
+
+**`backend/tts.py` rewritten:**
+- Replaced edge-tts with `piper.PiperVoice`. `synthesize(text)` returns 16-bit PCM WAV bytes.
+- Voice model auto-downloaded to project-local `./models/piper/` on first use via `huggingface_hub.hf_hub_download` (handles Windows symlink fallback).
+- `_voice_repo_path()` parses voice names like `en_US-ryan-high` → `en/en_US/ryan/high` for HF repo lookup.
+- `lru_cache` on `_voice()` so the model loads once per process.
+- `TTSFailure` exception preserved (used by app.py error handling) — but in practice fires only on download failure, not at synthesis time.
+- Removed retry/timeout/asyncio plumbing — local synthesis doesn't need it.
+
+**Format: WAV instead of MP3.**
+- `backend/adapters.py` and `app.py` updated: `st.audio(audio, format="audio/wav")` everywhere it was `audio/mp3`.
+
+**Pre-warm in `app.py` `_load_backend()`:**
+- Now also calls `backend.tts._voice()` during the warmup splash so the first user question doesn't pay the model-load latency. Spinner message updated to mention "the local voice model" alongside the embedder + ChromaDB.
+
+**Performance:**
+- First synthesis after warmup: ~2.5s for a typical answer (10-15 words).
+- WAV output: ~30 KB/sec of speech (mono 16-bit 22050Hz). Negligible vs the answer text.
+- Voice model on disk: ~60 MB (high quality variant). Cached forever.
+
+`.env.example` updated: `TTS_VOICE` (edge-tts) → `TTS_VOICE_PIPER` (Piper). Voice options listed in comment. `requirements.txt` re-pinned with `piper-tts==1.4.2`. (`edge-tts==7.2.8` left in requirements as an opt-out fallback if Piper has issues — easy to swap back.)
+
+### 2026-05-08 · `01fab77` · Strip markdown from RAG responses + tighter TTS timeout
 
 User reported a screenshot where the LLM's RAG answer rendered with the column body's `# Title` as an oversized H1 heading (much larger than the question text), plus a `(TTS unavailable: edge-tts failed after 3 attempts: TimeoutError)` caption. Two fixes — markdown stripping and TTS retry tuning.
 

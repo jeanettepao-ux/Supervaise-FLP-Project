@@ -18,13 +18,14 @@ class RobotAdapter(Protocol):
 
 
 class WebAdapter:
-    """Streamlit web implementation. Voice out via gTTS auto-playback."""
+    """Streamlit web implementation. Voice out via local Piper TTS (WAV)."""
 
     def speak(self, text: str, *, autoplay: bool = True) -> None:
         st.write(text)
         try:
             audio = synthesize(text)
-            st.audio(audio, format="audio/mp3", autoplay=autoplay)
+            if audio:
+                st.audio(audio, format="audio/wav", autoplay=autoplay)
         except Exception as e:
             st.caption(f"(TTS unavailable: {e})")
 

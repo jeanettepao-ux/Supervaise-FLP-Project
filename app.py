@@ -48,24 +48,28 @@ def _is_trigger_word(text: str) -> bool:
 
 @st.cache_resource(
     show_spinner=(
-        "Warming up the knowledge base — loading the embedding model and "
-        "the 954-chunk vector index. This happens once per session."
+        "Warming up the knowledge base — loading the embedding model, the "
+        "954-chunk vector index, and the local voice model. This happens "
+        "once per session."
     )
 )
 def _load_backend():
-    """Heavy backend imports + warm up the embedder and ChromaDB collection
-    so the first user question doesn't pay the cold-start cost. Cached
-    across script reruns; runs ONCE per Streamlit server session."""
+    """Heavy backend imports + warm up the embedder, ChromaDB collection,
+    and Piper voice so the first user question doesn't pay the cold-start
+    cost. Cached across script reruns; runs ONCE per Streamlit server
+    session."""
     from backend.adapters import WebAdapter
     from backend.orchestrator import answer_question
     from backend.stt import transcribe
     from backend.tts import synthesize
+    from backend.tts import _voice as _piper_voice
     from backend.retrieval import _model, _collection
     from backend import catalog
 
     # Pre-load the heavy stuff so the first question is fast.
-    _model()       # sentence-transformers model into memory
-    _collection()  # open ChromaDB (fast but caches the SQLite handle)
+    _model()         # sentence-transformers model into memory
+    _collection()    # open ChromaDB (fast but caches the SQLite handle)
+    _piper_voice()   # download (if needed) + load Piper TTS voice into memory
 
     return WebAdapter, answer_question, transcribe, synthesize, catalog
 
@@ -160,7 +164,7 @@ for turn in st.session_state.history:
         if turn["role"] == "assistant":
             audio = _synthesize_cached(turn["content"])
             if audio:
-                st.audio(audio, format="audio/mp3")
+                st.audio(audio, format="audio/wav")
             _render_meta(turn["meta"])
 
 # Inputs: voice (primary) + text fallback
