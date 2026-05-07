@@ -57,6 +57,36 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
+### 2026-05-08 · STT priming + chapter-aware chunk headers + persona prompt loosened
+
+User reported: (a) STT still rough on `small` (e.g. "A Centenary" -> "Ascentinary"), (b) RAG fell back to the refer-to-FLP line on "give me context of chapter 2" even though 5 chunks were retrieved — LLM was being over-strict about meta-textual queries. Three fixes in one round:
+
+**1. STT priming (`backend/stt.py`):**
+- Added `initial_prompt` with domain terms — primes Whisper to spell "Panganiban", "Centenary", "FLP", "Inquirer", "WPS", case names, etc. correctly instead of guessing phonetically. Big free accuracy win.
+- Added `language="en"` (eliminates auto-detect mistakes on Filipino-accented English).
+- Bumped `beam_size` from 1 to 5 (better ambiguous-phoneme resolution at ~2x decoding cost — still 5-8s per clip).
+
+**2. Chapter-aware chunk headers (`ingest_columns.py`):**
+- New `_chunk_header_for(col)` helper. For book chapters (slugs starting with `centenary-ch`), every chunk now gets prepended with `[Excerpt from "A Centenary of Justice" by CJ Panganiban — Centenary, Ch.N: Title.]` BEFORE embedding. Columns get no header (their distinctive titles already live in body text).
+- Effect: vector search now matches meta-textual queries like "what's in chapter 2 of the centenary book" — the chapter title is in the embedded text, not just metadata. Re-ingested all 954 chunks; book chapter vectors changed, column vectors unchanged.
+- Why this is safe (vs the v2 "don't inline byline" advice): v2's concern was about uniform noise (same byline on every column chunk = signal degradation). For chapters, each chapter has a UNIQUE title — distinguishing signal, not noise.
+
+**3. Persona prompt loosened (`prompts/instructions.txt`):**
+- Rule 1 now explicitly permits summarize / paraphrase / quote of provided sources, with language explaining that summarizing present sources is NOT fabrication. Adds an explicit clause for meta-textual questions ("what is chapter 2 about?") — synthesize from sources rather than refuse.
+- Fallback rule tightened: only fires when sources are GENUINELY silent on the topic, not when the question is meta-textual.
+
+**Smoke test (6 queries, all distances reported):**
+| Query | Result |
+|---|---|
+| "Give me context of chapter 2..." (the original failing query) | **Now answers from Ch 2**, top dist **0.266** (Ch.2) |
+| "What is in the centenary book" | Summarizes book, 5 chapter citations |
+| "Tell me about your book on the Supreme Court centenary" | Full overview, 5 chapter citations, top dist 0.330 |
+| "What is FLP?" | 2 column citations, accurate; book correctly absent |
+| "Summarize chapter 14 of your book" | Still fallbacks (too generic — no specific chunks above 0.55) |
+| Out-of-scope chocolate cake | Fallback in 36ms |
+
+5 of 6 working. The remaining miss is a generic "summarize chapter N" pattern; if frequent in real visitor questions, fix is bumping `RETRIEVAL_DISTANCE_THRESHOLD` from 0.55 -> 0.65.
+
 ### 2026-05-08 · `7dc84c9` · Harden edge-tts to survive multi-question conversations
 
 User reported "unexpected error" when asking a second question in the live UI. Most likely cause: edge-tts's underlying Microsoft endpoint occasionally rate-limits or drops a connection, and a single TTS hiccup was breaking the whole turn instead of being absorbed gracefully.

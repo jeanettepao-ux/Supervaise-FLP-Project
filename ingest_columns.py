@@ -479,6 +479,26 @@ def _token_len(text: str) -> int:
     return len(_TOK.encode(text))
 
 
+def _chunk_header_for(col: LoadedColumn) -> str:
+    """Return a one-line header to prepend to every chunk's text BEFORE embedding.
+
+    For book chapters, this puts the book title + chapter title into the chunk
+    text itself, so vector search matches meta-textual queries like
+    "give me context of chapter 2 of the centenary book". Without this header,
+    chunk text is just CJ's prose with no surface signal that it belongs to
+    chapter 2 — only the metadata says so, and metadata isn't embedded.
+
+    For columns (URL sources), no header — their distinctive titles already
+    appear naturally in the body text and uniform headers would just add noise.
+    """
+    if col.slug.startswith("centenary-ch"):
+        return (
+            f'[Excerpt from "A Centenary of Justice" by '
+            f'CJ Panganiban — {col.title}.]\n\n'
+        )
+    return ""
+
+
 def chunk_column(col: LoadedColumn) -> list[dict]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE_TOKENS,
@@ -487,11 +507,13 @@ def chunk_column(col: LoadedColumn) -> list[dict]:
         separators=SEPARATORS,
     )
     pieces = splitter.split_text(col.body_md)
+    header = _chunk_header_for(col)
     chunks = []
     for i, piece in enumerate(pieces):
+        text = header + piece if header else piece
         chunks.append({
             "chunk_id": f"{col.slug}__c{i:02d}",
-            "text": piece,
+            "text": text,
             "metadata": {
                 "source_url": col.url,
                 "title": col.title,
