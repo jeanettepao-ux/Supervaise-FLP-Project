@@ -57,7 +57,31 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Step 1.9 (part 1) · trigger-word interrupt
+### 2026-05-08 · Catalog mode · "list columns from year X" with clarification turn
+
+User reported: "Please provide five sample columns of CJ Panganiban" fell back to the FLP-referral line because retrieval found no chunks above threshold (and rightly so — chunks contain prose ABOUT topics, not catalog entries listing columns). Added a separate code path for catalog/list-style queries.
+
+**New module `backend/catalog.py`:**
+- `is_catalog_query(text)` — regex detection for "list columns", "give me N columns", "show me writings", "what have you written", etc. 10/10 inline test cases pass (true positives + correct false negatives for normal Q&A).
+- `extract_year(text)` — pulls a 4-digit year out of free text. 6/6 test cases pass.
+- `list_columns_by_year(year, n=5)` — queries ChromaDB metadata for unique sources with `publication_date.startswith(year)`, dedupes by source URL, returns up to N sorted by date desc, each with title / date / url / bucket / first-chunk preview (chapter-header prefix stripped). Verified live: 2023 returns 3 real columns ("President Marcos' ICC options", "Supercalifragilisticexpialidocious", "Let the rule of law reign in Asean").
+- `format_catalog_response(year, items)` — builds the visitor-facing text response with numbered titles + dates + previews.
+
+**`app.py` flow:**
+- New `pending_catalog` field in `st.session_state` tracks "we asked for a year, awaiting visitor's reply".
+- Order of checks per turn: trigger-word → catalog-turn-2 (year reply) → catalog-turn-1 (new catalog query) → normal RAG.
+- Single-turn case: if visitor specifies year in the original query ("give me 5 columns from 2023") → answer directly, skip clarification.
+- Two-turn case: if no year → ask "I would be glad to share. For which year? My published columns span roughly from 2011 through 2026." → wait for reply → answer.
+- Reply that doesn't contain a year → cancel pending state, treat the message as a new query (could be a normal RAG question or a different catalog query).
+- Catalog responses populate the citations panel with the listed columns themselves, so visitors can click through to the URL of each one.
+
+**Try in the browser:**
+- "Please provide five sample columns of CJ Panganiban" → "I would be glad to share. For which year? ..."
+- "2023" → list of 5 columns from 2023 with previews
+- "Give me 5 columns from 2017" (year inline) → direct answer, no clarification turn
+- "Tell me about Estrada v. Desierto" → unaffected, normal RAG flow
+
+### 2026-05-08 · `b9bd1a5` · Step 1.9 (part 1) · trigger-word interrupt
 
 Implements HANDOVER §3 rule #7: visitor saying one of the configured trigger phrases ends the session and resets state for the next visitor. The 5-min idle auto-clear (rule #9) is still pending — that's part 2 of Step 1.9.
 

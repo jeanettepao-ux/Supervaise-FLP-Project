@@ -61,23 +61,55 @@ def _load_backend():
     from backend.stt import transcribe
     from backend.tts import synthesize
     from backend.retrieval import _model, _collection
+    from backend import catalog
 
     # Pre-load the heavy stuff so the first question is fast.
     _model()       # sentence-transformers model into memory
     _collection()  # open ChromaDB (fast but caches the SQLite handle)
 
-    return WebAdapter, answer_question, transcribe, synthesize
+    return WebAdapter, answer_question, transcribe, synthesize, catalog
 
 
-WebAdapter, answer_question, transcribe, synthesize = _load_backend()
+WebAdapter, answer_question, transcribe, synthesize, catalog = _load_backend()
 
 
 if "history" not in st.session_state:
     st.session_state.history = []
 if "last_audio_key" not in st.session_state:
     st.session_state.last_audio_key = None
+if "pending_catalog" not in st.session_state:
+    st.session_state.pending_catalog = None  # original catalog query, awaiting year
 
 adapter = WebAdapter()
+
+
+def _catalog_meta(items: list[dict]) -> dict:
+    """Build the meta dict for a catalog answer — items become citations."""
+    return {
+        "citations": [
+            {
+                "title": item.get("title"),
+                "date": item.get("date"),
+                "url": item.get("url"),
+                "bucket": item.get("bucket"),
+                "distance": 0.0,
+                "citation_safe": True,
+            }
+            for item in items
+        ],
+        "latency_ms": 0,
+        "fallback": False,
+        "fallback_reason": None,
+    }
+
+
+def _empty_meta() -> dict:
+    return {
+        "citations": [],
+        "latency_ms": 0,
+        "fallback": False,
+        "fallback_reason": None,
+    }
 
 
 @st.cache_data(show_spinner=False)
@@ -158,8 +190,71 @@ if question:
             adapter.speak(FAREWELL_TEXT, autoplay=True)
         st.session_state.history = []
         st.session_state.last_audio_key = None
+        st.session_state.pending_catalog = None
         st.success("Conversation cleared — ready for the next visitor.")
         st.stop()
+
+    # Catalog-mode turn 2 — we previously asked "for which year?" and the
+    # visitor's reply may contain that year. If yes, answer directly with
+    # the column list. If no year, cancel pending and treat as a new query.
+    if st.session_state.pending_catalog:
+        year = catalog.extract_year(question)
+        if year:
+            with st.chat_message("user"):
+                st.write(question)
+            items = catalog.list_columns_by_year(year, n=5)
+            response_text = catalog.format_catalog_response(year, items)
+            with st.chat_message("assistant"):
+                adapter.speak(response_text, autoplay=True)
+                meta = _catalog_meta(items)
+                _render_meta(meta)
+            st.session_state.history.append({"role": "user", "content": question})
+            st.session_state.history.append(
+                {"role": "assistant", "content": response_text, "meta": meta}
+            )
+            st.session_state.pending_catalog = None
+            st.stop()
+        else:
+            # Reply didn't contain a year — drop pending state and let this
+            # message flow through as a normal question (or new catalog query).
+            st.session_state.pending_catalog = None
+
+    # Catalog-mode turn 1 — detect catalog query and either answer (if year
+    # is in the query) or ask for the year as a clarification turn.
+    if catalog.is_catalog_query(question):
+        year = catalog.extract_year(question)
+        if year:
+            # User specified the year directly — single-turn catalog answer.
+            with st.chat_message("user"):
+                st.write(question)
+            items = catalog.list_columns_by_year(year, n=5)
+            response_text = catalog.format_catalog_response(year, items)
+            with st.chat_message("assistant"):
+                adapter.speak(response_text, autoplay=True)
+                meta = _catalog_meta(items)
+                _render_meta(meta)
+            st.session_state.history.append({"role": "user", "content": question})
+            st.session_state.history.append(
+                {"role": "assistant", "content": response_text, "meta": meta}
+            )
+            st.stop()
+        else:
+            # Ask for the year as a clarification turn.
+            with st.chat_message("user"):
+                st.write(question)
+            clarification = (
+                "I would be glad to share. For which year? "
+                "My published columns span roughly from 2011 through 2026."
+            )
+            with st.chat_message("assistant"):
+                adapter.speak(clarification, autoplay=True)
+                _render_meta(_empty_meta())
+            st.session_state.history.append({"role": "user", "content": question})
+            st.session_state.history.append(
+                {"role": "assistant", "content": clarification, "meta": _empty_meta()}
+            )
+            st.session_state.pending_catalog = question
+            st.stop()
 
     # Render the user message immediately for responsiveness; only commit to
     # history once the assistant turn fully succeeds, so a mid-turn failure
