@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 
 from backend.llm import chat
 from backend.prompts import fallback, system_prompt
 from backend.retrieval import RetrievedChunk, retrieve
+
+
+# Strip markdown heading lines (#, ##, ###...) from text. Streamlit renders
+# them as oversized H1/H2/H3 in the chat UI, which is jarring inside an
+# answer that should be plain prose. Used both for chunks (before they go
+# to the LLM, so the LLM doesn't see/copy the column title twice) and for
+# the LLM's response (defense in depth — if the LLM still emits headings,
+# we strip them before display).
+_MD_HEADING_RE = re.compile(r"(?m)^\s*#+\s+")
+_MD_LEADING_TITLE_RE = re.compile(r"^\s*#+\s+[^\n]+\n+")
 
 
 @dataclass
@@ -19,13 +30,30 @@ class Response:
     fallback_reason: str | None = None
 
 
+def _strip_chunk_title_heading(text: str) -> str:
+    """Remove the leading '# Title' line from a chunk's body — the column's
+    title is already passed to the LLM via the citation label, no need for
+    it to appear twice in the prompt (causes the LLM to echo it back as
+    a heading in its answer)."""
+    return _MD_LEADING_TITLE_RE.sub("", text).strip()
+
+
+def _strip_response_headings(text: str) -> str:
+    """Defense in depth: strip any markdown heading prefixes the LLM still
+    emits in its answer, so the chat UI doesn't render them as H1."""
+    return _MD_HEADING_RE.sub("", text)
+
+
 def _format_sources_message(chunks: list[RetrievedChunk]) -> str:
     parts = []
     for i, c in enumerate(chunks, 1):
-        parts.append(f'[{i}] "{c.title}" ({c.date})\n    {c.text}')
+        body = _strip_chunk_title_heading(c.text)
+        parts.append(f'[{i}] "{c.title}" ({c.date})\n    {body}')
     return (
         "Provided sources (CJ Panganiban's published columns). "
-        "Answer ONLY from these passages.\n\n" + "\n\n".join(parts)
+        "Answer ONLY from these passages. Reply in plain prose — do NOT "
+        "use markdown headings (#, ##) or repeat source titles as headings.\n\n"
+        + "\n\n".join(parts)
     )
 
 
@@ -71,6 +99,7 @@ def answer_question(text: str, history: list[dict] | None = None) -> Response:
         {"role": "user", "content": text},
     ]
     answer = chat(messages)
+    answer = _strip_response_headings(answer)
     answer = _trim_to_word_limit(answer, limit=150)
 
     latency_ms = (time.perf_counter() - start) * 1000

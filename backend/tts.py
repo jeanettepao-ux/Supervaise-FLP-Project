@@ -25,8 +25,11 @@ import time
 from edge_tts import Communicate
 
 DEFAULT_VOICE = "en-US-GuyNeural"
-DEFAULT_RETRIES = 2
-DEFAULT_TIMEOUT = 15.0  # seconds, per attempt
+# Tighter retry config: edge-tts hiccups are intermittent. Better to fall
+# back to text-only quickly than freeze the conversation for 45 seconds.
+# 1 retry × 8s timeout = 16s worst case before the friendly caption shows.
+DEFAULT_RETRIES = 1
+DEFAULT_TIMEOUT = 8.0  # seconds, per attempt
 
 
 class TTSFailure(RuntimeError):

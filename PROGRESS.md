@@ -57,7 +57,23 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Catalog UX · strip markdown from previews
+### 2026-05-08 · Strip markdown from RAG responses + tighter TTS timeout
+
+User reported a screenshot where the LLM's RAG answer rendered with the column body's `# Title` as an oversized H1 heading (much larger than the question text), plus a `(TTS unavailable: edge-tts failed after 3 attempts: TimeoutError)` caption. Two fixes — markdown stripping and TTS retry tuning.
+
+**Markdown stripping in `backend/orchestrator.py`:**
+- New `_strip_chunk_title_heading(text)` removes the leading `# Title` line from each chunk before it goes to the LLM. The chunk's title is already passed via the `[N] "Title"` label in the sources message; a duplicate `# Title` heading inside the chunk body just teaches the LLM to echo it back as a heading in its response. With this strip, the LLM sees prose only.
+- New `_strip_response_headings(text)` defense-in-depth. Strips any `#` heading prefixes the LLM still emits in its answer (e.g., if it formats with `## Section Title`). Applied AFTER `chat()`, BEFORE `_trim_to_word_limit()`.
+- `_format_sources_message` updated to also instruct the LLM directly: *"Reply in plain prose — do NOT use markdown headings (#, ##) or repeat source titles as headings."*
+
+**Tighter TTS retry config in `backend/tts.py`:**
+- `DEFAULT_RETRIES`: 2 → 1
+- `DEFAULT_TIMEOUT`: 15s → 8s
+- Worst case: 16s before falling back to text-only (was 45s). Edge-tts hiccups are intermittent — when it's going to fail, fail fast and keep the conversation moving.
+
+3/3 helper tests pass on the strippers. Smoke-tested boot still clean.
+
+### 2026-05-08 · `aa86c30` · Catalog UX · strip markdown from previews
 
 User reported the catalog response rendered the column body's leading `# Title` heading as a giant H1 in Streamlit (because the column body's first line is the markdown title, and `st.markdown` interprets `#` as H1). Made the previews plain-text:
 
