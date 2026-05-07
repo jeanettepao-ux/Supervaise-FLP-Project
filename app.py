@@ -1,16 +1,42 @@
 import streamlit as st
 
-from backend.adapters import WebAdapter
-from backend.orchestrator import answer_question
-from backend.stt import transcribe
-from backend.tts import synthesize
-
+# Render the page shell first (cheap), then defer heavy backend imports
+# into a cached resource loader so the user sees the title immediately
+# and a labelled spinner during the 10-15s cold start instead of a blank
+# black page.
 st.set_page_config(page_title="CJ Panganiban - May 30 Demo", layout="centered")
 st.title("CJ Panganiban - May 30 Demo")
 st.caption(
     "Pre-prototype. Voice in / voice out. Answers are not yet source-grounded - "
     "RAG retrieval arrives at the Day-15 convergence."
 )
+
+
+@st.cache_resource(
+    show_spinner=(
+        "Warming up the knowledge base — loading the embedding model and "
+        "the 954-chunk vector index. This happens once per session."
+    )
+)
+def _load_backend():
+    """Heavy backend imports + warm up the embedder and ChromaDB collection
+    so the first user question doesn't pay the cold-start cost. Cached
+    across script reruns; runs ONCE per Streamlit server session."""
+    from backend.adapters import WebAdapter
+    from backend.orchestrator import answer_question
+    from backend.stt import transcribe
+    from backend.tts import synthesize
+    from backend.retrieval import _model, _collection
+
+    # Pre-load the heavy stuff so the first question is fast.
+    _model()       # sentence-transformers model into memory
+    _collection()  # open ChromaDB (fast but caches the SQLite handle)
+
+    return WebAdapter, answer_question, transcribe, synthesize
+
+
+WebAdapter, answer_question, transcribe, synthesize = _load_backend()
+
 
 if "history" not in st.session_state:
     st.session_state.history = []

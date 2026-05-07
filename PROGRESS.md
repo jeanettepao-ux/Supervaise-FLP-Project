@@ -57,7 +57,28 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · STT post-correction + expanded primer (domain vocabulary biasing)
+### 2026-05-08 · UX · "Warming up the knowledge base…" splash on cold start
+
+User reported the app shows a blank/black page for 10-15s after `streamlit run`. Root cause: heavy backend imports (`chromadb`, `sentence_transformers`, `torch`, `transformers`, `faster_whisper`) happen at module load — Python blocks until they finish before any `st.*` call can render UI.
+
+**Fix** in `app.py`:
+- `st.set_page_config` / `st.title` / `st.caption` now run **before** any backend import — title appears immediately when the WebSocket connects.
+- Backend imports are deferred into a `_load_backend()` function decorated with `@st.cache_resource(show_spinner=...)`. The spinner displays a labelled message ("Warming up the knowledge base — loading the embedding model and the 954-chunk vector index. This happens once per session.") while imports and the warm-up run.
+- Pre-warms the heavy stuff inside `_load_backend()` — calls `_model()` (sentence-transformers load) and `_collection()` (ChromaDB open) right away. Shifts the first-question cold-start cost into the visible spinner phase, so the user's first question feels fast (1-3s) instead of hitting another 10s warm-up mid-conversation.
+- `@st.cache_resource` runs once per Streamlit server session; subsequent script reruns reuse the cached resources instantly.
+
+UX before vs after:
+
+| | Before | After |
+|---|---|---|
+| 0-1s after page load | Blank black page | Title + caption visible, spinner with explanation |
+| 1-15s | Still blank | Spinner with "Warming up…" message |
+| ~15s | Whole UI suddenly appears | Spinner finishes, full UI renders |
+| First question | Hits another ~5s cold-start lag (model lazy-load) | Fast — model already warm |
+
+Smoke-tested boot still clean (~6s).
+
+### 2026-05-08 · `868801e` · STT post-correction + expanded primer (domain vocabulary biasing)
 
 User asked: can we strategy the STT so its output reliably uses our justice / FLP vocabulary instead of phonetic guesses (e.g., "Ascentinary" instead of "A Centenary"). Yes — `initial_prompt` is a soft bias, but two layers do better.
 
