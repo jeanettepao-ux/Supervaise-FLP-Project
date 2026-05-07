@@ -83,6 +83,34 @@ _CATALOG_PATTERNS = [
 
 _YEAR_RE = re.compile(r"\b(19[7-9]\d|20\d{2})\b")
 _HEADER_STRIP_RE = re.compile(r"^\[Excerpt from[^\]]+\]\s*")
+_SENTENCE_END_RE = re.compile(r"(?<=[a-z]{2}[.!?])\s+(?=[A-Z])")
+
+
+def _first_sentences(text: str, max_chars: int = 280) -> str:
+    """Take as many leading sentences from `text` as fit in `max_chars`.
+    Always ends on a sentence boundary (no mid-sentence cut + ellipsis).
+    Same conservative split as backend/tts.py: requires 2+ lowercase
+    letters before the punctuation so abbreviations like 'v.', 'Mr.'
+    don't trip a false break."""
+    if not text:
+        return ""
+    sentences = _SENTENCE_END_RE.split(text.strip())
+    out_parts: list[str] = []
+    total = 0
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        addition = len(s) + (1 if out_parts else 0)
+        if out_parts and total + addition > max_chars:
+            break
+        out_parts.append(s)
+        total += addition
+    if not out_parts:
+        # Single-sentence text longer than max_chars — return what we have
+        # rather than an empty string, even if it overshoots a bit.
+        return sentences[0].strip() if sentences else ""
+    return " ".join(out_parts)
 
 # Markdown stripping for clean previews. Streamlit renders the response via
 # st.markdown, so any '#' heading or '**bold**' marker in the preview text
@@ -183,6 +211,8 @@ def format_catalog_response(year: int, items: list[dict]) -> str:
         parts.append(f"{i}. \"{item['title']}\" ({item['date']})")
         preview = item["preview"].replace("\n", " ").strip()
         if preview:
-            preview = preview[:200].rstrip(",.;: ")
-            parts.append(f"   {preview}...")
+            # Take complete leading sentences up to ~280 chars — never cut
+            # mid-sentence with an ellipsis.
+            preview = _first_sentences(preview, max_chars=280)
+            parts.append(f"   {preview}")
     return "\n".join(parts)

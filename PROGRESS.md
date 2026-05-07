@@ -57,7 +57,25 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · TTS · sentence pauses (0.4s between sentences)
+### 2026-05-08 · UX · complete-sentence truncation + clause-level TTS pauses
+
+User reported two issues from a screenshot of the catalog response:
+1. Catalog previews ended mid-sentence with "..." (e.g., "China is imposing the old ad..."). Visitor expects whole paragraphs.
+2. TTS read long sentences as one breathless wall — needs human-like mid-sentence pauses at commas.
+
+**Fix 1 — sentence-aware truncation (no mid-sentence cuts):**
+- `backend/catalog.py`: new `_first_sentences(text, max_chars)` that takes leading complete sentences up to a char budget. Always ends with `.` / `?` / `!`. No "..." appended; the preview reads as a real paragraph.
+- `backend/orchestrator.py`: `_trim_to_word_limit` rewritten — trims to N words then walks back to the last sentence-ending punctuation. RAG answers also never end mid-sentence now.
+- Both use the same conservative regex that doesn't false-split on `v.` / `Mr.` / `Dr.` / `Sr.`.
+
+**Fix 2 — clause-level TTS pauses for long sentences:**
+- `backend/tts.py`: new `_segments_with_pauses(text)` — for each sentence, if it's longer than `TTS_LONG_SENTENCE_WORDS` (default 14), split on `,` / `;` and insert `TTS_CLAUSE_PAUSE` (default 0.18s) silence at each break. Short sentences stay as one piece. The longer `TTS_SENTENCE_PAUSE` (0.4s) still applies between sentences.
+- `synthesize()` now iterates segments with their pauses, instead of just sentence-by-sentence.
+- Verified: a 24-word sentence with 3 commas now plays as 4 clauses with 0.18s pauses between them — matches how a person would actually read it aloud.
+
+`.env.example` updated with `TTS_CLAUSE_PAUSE=0.18` and `TTS_LONG_SENTENCE_WORDS=14` plus inline docs.
+
+### 2026-05-08 · `f218936` · TTS · sentence pauses (0.4s between sentences)
 
 User requested pauses between sentences in the spoken output. piper-tts 1.4 dropped the `SynthesisConfig.sentence_silence` parameter, so we add the pauses ourselves: split text on sentence boundaries, synthesize each sentence in turn, write silence frames between them in the same WAV.
 

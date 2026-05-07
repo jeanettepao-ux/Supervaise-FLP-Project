@@ -58,10 +58,21 @@ def _format_sources_message(chunks: list[RetrievedChunk]) -> str:
 
 
 def _trim_to_word_limit(text: str, limit: int = 150) -> str:
+    """Trim text to at most `limit` words, then walk back to the last
+    sentence-ending punctuation so the output never ends mid-sentence.
+    If no sentence boundary is found in the truncated portion, falls back
+    to ending the line cleanly at a word boundary."""
     words = text.split()
     if len(words) <= limit:
         return text
-    return " ".join(words[:limit]).rstrip(",.;: ") + "..."
+    truncated = " ".join(words[:limit])
+    # Walk back to the last . ! ? — those mark sentence endings.
+    for i in range(len(truncated) - 1, -1, -1):
+        if truncated[i] in ".!?":
+            return truncated[: i + 1]
+    # No sentence end inside the budget — extreme edge case (one giant
+    # sentence longer than `limit` words). Fall back to clean word ending.
+    return truncated.rstrip(",.;: ") + "."
 
 
 def _citations_from(chunks: list[RetrievedChunk]) -> list[dict]:

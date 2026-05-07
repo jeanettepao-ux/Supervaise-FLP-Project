@@ -45,27 +45,48 @@ from piper import PiperVoice
 load_dotenv()
 
 DEFAULT_VOICE = "en_US-bryce-medium"
-DEFAULT_SENTENCE_PAUSE = 0.4  # seconds of silence between sentences
+DEFAULT_SENTENCE_PAUSE = 0.4   # seconds between sentences
+DEFAULT_CLAUSE_PAUSE = 0.18    # seconds between clauses inside a long sentence
+DEFAULT_LONG_SENTENCE_WORDS = 14  # threshold to trigger clause-level breaks
 _MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "piper"
 
-# Sentence splitter. Splits on . ! ? followed by whitespace + uppercase
-# letter, BUT only when at least 2 LOWERCASE letters precede the period
-# (avoids splitting on abbreviations like 'v.', 'Mr.', 'Dr.', 'Sr.' which
-# only have 1 lowercase letter — the rest are uppercase).
-#
-# Examples:
-#   "Estrada v. Desierto"       → 1 sentence (only 1 letter before "v.")
-#   "Mr. Smith said hi."        → 1 sentence (only "r" lowercase before "Mr.")
-#   "I wrote it. The case ruled" → 2 sentences ("it" = 2 lowercase)
-#
-# Known false-positive: "Plaintiff vs. Defendant" splits because "vs"
-# is 2 lowercase letters. Rare in our corpus; CJ uses "v." not "vs.".
+# Sentence splitter — see Fix 1 in catalog.py for the same regex shape.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[a-z]{2}[.!?])\s+(?=[A-Z])")
+# Clause splitter — splits on comma or semicolon followed by whitespace.
+# Won't split inside numbers like "200,000" because there's no whitespace.
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;])\s+")
 
 
 def _split_sentences(text: str) -> list[str]:
     parts = _SENTENCE_SPLIT_RE.split(text.strip())
     return [p.strip() for p in parts if p.strip()]
+
+
+def _segments_with_pauses(text: str) -> list[tuple[str, float]]:
+    """Return [(spoken_segment, pause_seconds_after), ...] for the text.
+    Long sentences (> threshold words) get split into clauses (on commas
+    / semicolons) with a SHORTER pause between them, so a 30-word sentence
+    sounds like a real person taking breaths instead of a non-stop wall."""
+    sentence_pause = float(os.environ.get("TTS_SENTENCE_PAUSE", DEFAULT_SENTENCE_PAUSE))
+    clause_pause = float(os.environ.get("TTS_CLAUSE_PAUSE", DEFAULT_CLAUSE_PAUSE))
+    long_threshold = int(os.environ.get("TTS_LONG_SENTENCE_WORDS", DEFAULT_LONG_SENTENCE_WORDS))
+
+    sentences = _split_sentences(text)
+    segments: list[tuple[str, float]] = []
+    for s_idx, sentence in enumerate(sentences):
+        is_last_sentence = s_idx == len(sentences) - 1
+        end_pause = 0.0 if is_last_sentence else sentence_pause
+
+        if len(sentence.split()) > long_threshold and clause_pause > 0:
+            clauses = [c.strip() for c in _CLAUSE_SPLIT_RE.split(sentence) if c.strip()]
+            for c_idx, clause in enumerate(clauses):
+                if c_idx < len(clauses) - 1:
+                    segments.append((clause, clause_pause))
+                else:
+                    segments.append((clause, end_pause))
+        else:
+            segments.append((sentence, end_pause))
+    return segments
 
 
 class TTSFailure(RuntimeError):
@@ -110,38 +131,39 @@ def _voice() -> PiperVoice:
 
 
 def synthesize(text: str, voice: str | None = None) -> bytes:
-    """Synthesize text to 16-bit PCM WAV bytes via Piper, with configurable
-    silence inserted between sentences for natural-sounding pacing."""
+    """Synthesize text to 16-bit PCM WAV bytes via Piper.
+
+    Pauses inserted between segments for natural-sounding pacing:
+    - Between sentences: TTS_SENTENCE_PAUSE seconds (default 0.4s)
+    - Between clauses inside a long (>14 word) sentence: TTS_CLAUSE_PAUSE
+      seconds (default 0.18s) — at commas / semicolons. Makes long
+      sentences sound like a real person taking a breath, not a wall."""
     if not text:
         return b""
-    pause_seconds = float(os.environ.get("TTS_SENTENCE_PAUSE", DEFAULT_SENTENCE_PAUSE))
     try:
         v = _voice()
-        sentences = _split_sentences(text)
-        if not sentences:
+        segments = _segments_with_pauses(text)
+        if not segments:
             return b""
 
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav:
-            # First sentence: synthesize_wav sets WAV header (channels,
-            # sample rate, sample width) on the file AND writes audio.
-            v.synthesize_wav(sentences[0], wav)
+            # First segment: synthesize_wav sets WAV header + writes audio.
+            first_text, _ = segments[0]
+            v.synthesize_wav(first_text, wav)
 
-            if len(sentences) > 1 and pause_seconds > 0:
-                # Build silence at the WAV's parameters (mono 16-bit @ rate).
-                n_silence_frames = int(wav.getframerate() * pause_seconds)
-                silence_bytes = bytes(
-                    n_silence_frames * wav.getnchannels() * wav.getsampwidth()
-                )
-                for sentence in sentences[1:]:
-                    wav.writeframes(silence_bytes)
-                    # set_wav_format=False so it just appends frames without
-                    # trying to re-write the header (which is already set).
-                    v.synthesize_wav(sentence, wav, set_wav_format=False)
-            elif len(sentences) > 1:
-                # No pause requested — just stitch sentences end-to-end.
-                for sentence in sentences[1:]:
-                    v.synthesize_wav(sentence, wav, set_wav_format=False)
+            n_channels = wav.getnchannels()
+            sample_width = wav.getsampwidth()
+            sample_rate = wav.getframerate()
+
+            for i in range(1, len(segments)):
+                # Pause AFTER the previous segment, BEFORE this one.
+                prev_pause = segments[i - 1][1]
+                if prev_pause > 0:
+                    n_silence = int(sample_rate * prev_pause)
+                    wav.writeframes(bytes(n_silence * n_channels * sample_width))
+                seg_text, _ = segments[i]
+                v.synthesize_wav(seg_text, wav, set_wav_format=False)
 
         return buf.getvalue()
     except Exception as e:  # noqa: BLE001
