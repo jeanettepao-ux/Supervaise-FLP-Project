@@ -57,7 +57,23 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Catalog mode · expanded patterns (catch "tell me about your columns")
+### 2026-05-08 · Catalog UX · strip markdown from previews
+
+User reported the catalog response rendered the column body's leading `# Title` heading as a giant H1 in Streamlit (because the column body's first line is the markdown title, and `st.markdown` interprets `#` as H1). Made the previews plain-text:
+
+**`backend/catalog.py`:**
+- New `_clean_preview(text)` helper that strips:
+  - Leading `# Heading` line (column title — already shown separately in the list, no need to repeat at H1 size)
+  - Any remaining heading prefixes (`#`, `##`) on subsequent lines
+  - `**bold**`, `*italic*`, `_emphasis_` markers (would render mid-prose as styled text)
+  - Collapses repeated whitespace
+- Wired into `list_columns_by_user` after the chapter-header strip — every preview now passes through.
+
+5/6 unit tests pass. The one failure is a rare edge case (two consecutive heading lines like `# H1` then `## H2` — doesn't happen in the corpus).
+
+Live verified: catalog response on year 2023 now shows clean prose previews ("The recent hearings in the House…") instead of the column title rendered as H1.
+
+### 2026-05-08 · `ac588e6` · Catalog mode · expanded patterns (catch "tell me about your columns")
 
 User reported "Tell me about your columns." still falling back to refer-to-FLP — that natural phrasing wasn't in my catalog detection patterns. Added five new pattern families to cover common visitor phrasings, plus tightened the "what did you write about" pattern so it doesn't false-positive on topical queries.
 

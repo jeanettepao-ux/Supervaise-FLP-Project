@@ -84,6 +84,32 @@ _CATALOG_PATTERNS = [
 _YEAR_RE = re.compile(r"\b(19[7-9]\d|20\d{2})\b")
 _HEADER_STRIP_RE = re.compile(r"^\[Excerpt from[^\]]+\]\s*")
 
+# Markdown stripping for clean previews. Streamlit renders the response via
+# st.markdown, so any '#' heading or '**bold**' marker in the preview text
+# would render at heading size — we want preview to look like normal prose.
+_MD_LEADING_HEADING_RE = re.compile(r"^\s*#+\s+[^\n]+\n+")
+_MD_HEADING_LINE_RE = re.compile(r"(?m)^\s*#+\s+")
+_MD_BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
+_MD_ITALIC_STAR_RE = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
+_MD_ITALIC_UNDERSCORE_RE = re.compile(r"(?<![\w_])_([^_]+)_(?![\w_])")
+_WS_RE = re.compile(r"\s+")
+
+
+def _clean_preview(text: str) -> str:
+    """Strip markdown formatting that would render as oversized headings or
+    weird emphasis when the catalog response is rendered through st.markdown."""
+    # Remove the leading heading line (column title — we already show it
+    # separately in the list, no need for the preview to repeat it).
+    text = _MD_LEADING_HEADING_RE.sub("", text)
+    # Demote any remaining '#' heading lines to plain text.
+    text = _MD_HEADING_LINE_RE.sub("", text)
+    # Strip bold/italic markers.
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_ITALIC_STAR_RE.sub(r"\1", text)
+    text = _MD_ITALIC_UNDERSCORE_RE.sub(r"\1", text)
+    # Collapse whitespace.
+    return _WS_RE.sub(" ", text).strip()
+
 
 def is_catalog_query(text: str) -> bool:
     """True iff `text` looks like a request to LIST columns/writings."""
@@ -128,6 +154,9 @@ def list_columns_by_year(year: int, n: int = 5) -> list[dict]:
         text_doc = (documents[i] or "") if i < len(documents) else ""
         # Drop the synthetic chapter-excerpt header we prepend at ingest time.
         cleaned = _HEADER_STRIP_RE.sub("", text_doc).strip()
+        # Drop markdown headings / bold so previews render as plain prose
+        # at the same font size as the question text.
+        cleaned = _clean_preview(cleaned)
         by_source[url] = {
             "title": meta.get("title", "(untitled)"),
             "date": date,
