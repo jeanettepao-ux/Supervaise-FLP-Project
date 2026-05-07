@@ -27,7 +27,13 @@ def _transcribe_audio(audio_bytes: bytes) -> str:
 
 @st.cache_data(show_spinner=False)
 def _synthesize_cached(text: str) -> bytes:
-    return synthesize(text)
+    """Cached TTS for historical replays. Returns b'' on failure so we don't
+    poison the cache with exceptions and don't break the conversation if
+    Microsoft's TTS endpoint hiccups for one chunk."""
+    try:
+        return synthesize(text)
+    except Exception:  # noqa: BLE001 — TTS hiccups are non-fatal for the chat
+        return b""
 
 
 def _render_meta(meta: dict) -> None:
@@ -60,10 +66,9 @@ for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         st.write(turn["content"])
         if turn["role"] == "assistant":
-            try:
-                st.audio(_synthesize_cached(turn["content"]), format="audio/mp3")
-            except Exception:
-                pass
+            audio = _synthesize_cached(turn["content"])
+            if audio:
+                st.audio(audio, format="audio/mp3")
             _render_meta(turn["meta"])
 
 # Inputs: voice (primary) + text fallback
@@ -83,26 +88,37 @@ elif typed_question:
     question = typed_question
 
 if question:
-    st.session_state.history.append({"role": "user", "content": question})
+    # Render the user message immediately for responsiveness; only commit to
+    # history once the assistant turn fully succeeds, so a mid-turn failure
+    # never leaves an orphan user message in the conversation.
     with st.chat_message("user"):
         st.write(question)
 
     llm_history = [
         {"role": t["role"], "content": t["content"]}
-        for t in st.session_state.history[:-1]
+        for t in st.session_state.history
     ]
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = answer_question(question, llm_history)
-        meta = {
-            "citations": response.citations,
-            "latency_ms": response.latency_ms,
-            "fallback": response.fallback,
-            "fallback_reason": response.fallback_reason,
-        }
-        adapter.speak(response.text, autoplay=True)
-        _render_meta(meta)
 
-    st.session_state.history.append(
-        {"role": "assistant", "content": response.text, "meta": meta}
-    )
+    try:
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = answer_question(question, llm_history)
+            meta = {
+                "citations": response.citations,
+                "latency_ms": response.latency_ms,
+                "fallback": response.fallback,
+                "fallback_reason": response.fallback_reason,
+            }
+            adapter.speak(response.text, autoplay=True)
+            _render_meta(meta)
+
+        # Both turns succeeded — commit atomically.
+        st.session_state.history.append({"role": "user", "content": question})
+        st.session_state.history.append(
+            {"role": "assistant", "content": response.text, "meta": meta}
+        )
+    except Exception as e:  # noqa: BLE001 — friendly catch-all for the chat
+        st.error(
+            f"Sorry, something went wrong on this turn: "
+            f"`{type(e).__name__}: {e}`. Please try asking again."
+        )
