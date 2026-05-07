@@ -57,7 +57,27 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · UX · "Warming up the knowledge base…" splash on cold start
+### 2026-05-08 · Step 1.9 (part 1) · trigger-word interrupt
+
+Implements HANDOVER §3 rule #7: visitor saying one of the configured trigger phrases ends the session and resets state for the next visitor. The 5-min idle auto-clear (rule #9) is still pending — that's part 2 of Step 1.9.
+
+**Behavior:**
+- Configured triggers (from `TRIGGER_WORDS` env, comma-separated): `that's enough`, `okay thank you`, `thank you`, `next question`.
+- On detection: speak a brief CJ-voice farewell (`FAREWELL_TEXT` constant), clear `st.session_state.history`, reset `last_audio_key`, show a green "Conversation cleared — ready for the next visitor" banner, and `st.stop()` to end the script run cleanly. No LLM call, no chunk retrieval — just the goodbye.
+- Match is **exact** after lowercase + trailing-punctuation strip: `Thank you.` → trigger ✓, `THANK YOU` → trigger ✓, `Thank you, can you tell me about FLP` → NOT trigger (visitor is being polite while continuing). This avoids false positives where polite intros end the conversation prematurely.
+
+**Where it lives:** `app.py` only — no backend changes. Trigger check runs FIRST in the `if question:` block, before the user-message render and before any LLM call.
+
+**Tests:** 15/15 inline cases pass — covering case-insensitivity (`THANK YOU`), punctuation tolerance (`Thank you.`, `Thank You!`, `Next Question?`), the four configured phrases, and the false-positive avoidance ("Thank you, can you tell me…", "Thanks, that was helpful", normal questions).
+
+**To test in the browser** after restart:
+1. Ask any normal question → conversation builds normally.
+2. Then say or type "thank you" → CJ voice plays the farewell, history clears, page shows the success banner.
+3. Walk away. Next visitor approaches. They speak/type → fresh conversation, no leakage from previous visitor.
+
+Step 1.9 part 2 (5-minute idle auto-clear, HANDOVER rule #9) still pending. Logging the trigger event in `logs/turns.jsonl` waits on Step 1.10.
+
+### 2026-05-08 · `73b03e3` · UX · "Warming up the knowledge base…" splash on cold start
 
 User reported the app shows a blank/black page for 10-15s after `streamlit run`. Root cause: heavy backend imports (`chromadb`, `sentence_transformers`, `torch`, `transformers`, `faster_whisper`) happen at module load — Python blocks until they finish before any `st.*` call can render UI.
 

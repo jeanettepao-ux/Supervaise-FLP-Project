@@ -1,4 +1,9 @@
+import os
+
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Render the page shell first (cheap), then defer heavy backend imports
 # into a cached resource loader so the user sees the title immediately
@@ -10,6 +15,35 @@ st.caption(
     "Pre-prototype. Voice in / voice out. Answers are not yet source-grounded - "
     "RAG retrieval arrives at the Day-15 convergence."
 )
+
+
+# =============================================================
+# Trigger-word interrupt (Step 1.9, HANDOVER §3 rule #7)
+# =============================================================
+# When the visitor says one of these exact phrases (after normalization),
+# end the conversation: speak a brief farewell, clear history, and reset
+# state for the next visitor.
+TRIGGER_WORDS: set[str] = {
+    t.strip().lower()
+    for t in os.environ.get("TRIGGER_WORDS", "").split(",")
+    if t.strip()
+}
+
+FAREWELL_TEXT = (
+    "Thank you for the conversation. I hope my reflections have been useful. "
+    "The session is now cleared for the next visitor."
+)
+
+
+def _is_trigger_word(text: str) -> bool:
+    """Return True iff `text` exactly matches a configured trigger phrase
+    after lowercase + trailing-punctuation normalization. Exact match is
+    intentional — 'thank you' triggers, but 'thank you, tell me about X'
+    does not (visitor is being polite while continuing the conversation)."""
+    if not TRIGGER_WORDS or not text:
+        return False
+    normalized = text.lower().strip().rstrip(".,!?;: ")
+    return normalized in TRIGGER_WORDS
 
 
 @st.cache_resource(
@@ -114,6 +148,19 @@ elif typed_question:
     question = typed_question
 
 if question:
+    # Trigger-word check first — visitor saying "thank you" / "next question"
+    # / "that's enough" ends the session for the next visitor. No LLM call,
+    # no history append, just a brief CJ-voice farewell + state reset.
+    if _is_trigger_word(question):
+        with st.chat_message("user"):
+            st.write(question)
+        with st.chat_message("assistant"):
+            adapter.speak(FAREWELL_TEXT, autoplay=True)
+        st.session_state.history = []
+        st.session_state.last_audio_key = None
+        st.success("Conversation cleared — ready for the next visitor.")
+        st.stop()
+
     # Render the user message immediately for responsiveness; only commit to
     # history once the assistant turn fully succeeds, so a mid-turn failure
     # never leaves an orphan user message in the conversation.
