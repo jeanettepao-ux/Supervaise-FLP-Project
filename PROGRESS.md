@@ -57,7 +57,33 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · STT priming + chapter-aware chunk headers + persona prompt loosened
+### 2026-05-08 · STT post-correction + expanded primer (domain vocabulary biasing)
+
+User asked: can we strategy the STT so its output reliably uses our justice / FLP vocabulary instead of phonetic guesses (e.g., "Ascentinary" instead of "A Centenary"). Yes — `initial_prompt` is a soft bias, but two layers do better.
+
+**Layer (a) — expanded `DOMAIN_PROMPT` in `backend/stt.py`:**
+- Was ~50 words; now ~150 words covering 21st CJ + book + Inquirer column + topics (rule of law, WPS, ICC) + 8 case names + 6 chapter titles. Whisper truncates at ~224 tokens; we're well under.
+- Effect: stronger phonetic bias toward our domain terms during decoding.
+
+**Layer (b) — `_domain_correct()` post-transcription pass:**
+- **(b1) Explicit known-misheard dictionary** — 25+ regex rules for the specific mishearings we've observed (Ascentinary, Panganibang, Centinery, Estraja, Comelek, etc.) plus acronym normalization (FLP, WPS, ICC, CJ).
+- **(b2) Fuzzy fallback** via `difflib.get_close_matches` against a 24-term domain vocabulary, applied only to capitalized tokens of length ≥5 with cutoff 0.85. Catches new mishearings we haven't explicitly listed (e.g., "Estrana" → "Estrada") without false-positiving on common English.
+- Toggleable via `STT_DOMAIN_CORRECT=false` env for A/B testing.
+
+15/15 inline test cases pass:
+- "Ascentinary of Justice" → "A Centenary of Justice" ✓
+- "Panganibang" → "Panganiban" ✓
+- "Centinery" → "Centenary" ✓
+- "Estraja v Desierto" → "Estrada v Desierto" ✓
+- "Foundation for Liberty Prosperity" → "...Liberty and Prosperity" ✓
+- "flp" / "wps" / "icc" / "cj" → uppercase ✓
+- "I went to the park yesterday" preserved ✓
+- "Hoe mad is it" preserved (not a domain term — Whisper bug, not our concern) ✓
+- "Estrana" → "Estrada" via fuzzy fallback (not in explicit list) ✓
+
+Difflib is in stdlib; no new pip dep.
+
+### 2026-05-08 · `bed579d` · STT priming + chapter-aware chunk headers + persona prompt loosened
 
 User reported: (a) STT still rough on `small` (e.g. "A Centenary" -> "Ascentinary"), (b) RAG fell back to the refer-to-FLP line on "give me context of chapter 2" even though 5 chunks were retrieved — LLM was being over-strict about meta-textual queries. Three fixes in one round:
 
