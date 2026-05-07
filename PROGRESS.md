@@ -57,7 +57,19 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-07 · `docs/pipeline.md` — full pipeline review document
+### 2026-05-08 · `7dc84c9` · Harden edge-tts to survive multi-question conversations
+
+User reported "unexpected error" when asking a second question in the live UI. Most likely cause: edge-tts's underlying Microsoft endpoint occasionally rate-limits or drops a connection, and a single TTS hiccup was breaking the whole turn instead of being absorbed gracefully.
+
+Three changes:
+
+- **`backend/tts.py`** — `synthesize()` now retries up to 2 times with linear backoff (0.5s, 1.0s) and has a 15-second per-attempt timeout via `asyncio.wait_for`. New `TTSFailure` exception type for callers. Hung Microsoft endpoints can no longer freeze a turn.
+- **`app.py` `_synthesize_cached`** — wraps `synthesize()` in try/except and returns `b""` on failure, so Streamlit's `cache_data` caches an empty result instead of poisoning the cache. History loop checks `if audio:` before calling `st.audio`.
+- **`app.py` per-turn flow** — atomic commit. User message is rendered immediately for UX but only added to `st.session_state.history` after the assistant turn fully succeeds. On any error mid-turn, shows a friendly `st.error` and leaves history clean — user can simply ask again, no orphan user-only turns.
+
+No TTS provider swap; staying with edge-tts (`en-US-AndrewNeural`) for now. If multi-question conversations still misbehave after this, next step is OpenAI TTS or local Piper.
+
+### 2026-05-07 · `c1016c9` · `docs/pipeline.md` — full pipeline review document
 
 Comprehensive 18-section technical review of the pipeline as it stands today (post-`5a58664`). Covers high-level architecture, every component (frontend, STT, LLM, TTS, persona, embeddings, vector store, retrieval, orchestrator, robot adapter), KB composition by bucket, ingestion pipeline diagram, config files, env vars, Phase A→B cutover checklist, what's not yet wired (Steps 1.9 and 1.10), and known imperfections (oversized chapters, dead env vars, distance threshold, etc.).
 
