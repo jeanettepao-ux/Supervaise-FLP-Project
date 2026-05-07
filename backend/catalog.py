@@ -19,24 +19,64 @@ from __future__ import annotations
 
 import re
 
-# Patterns matching list/catalog-style queries.
+# Patterns matching list/catalog-style queries (visitor wants a list,
+# not a topical answer). Plural noun forms ("your columns") are a much
+# stronger catalog signal than singular ("your column on FLP" is topical
+# about a specific piece). New patterns below favor plural forms.
 _CATALOG_PATTERNS = [
+    # Imperative verbs: "list / show / give me / provide [some] columns"
     re.compile(
         r"\b(list|show|give\s+me|provide)\s+(?:\w+\s+){0,4}"
         r"(columns?|writings?|articles?|essays?|works?)\b",
         re.IGNORECASE,
     ),
+    # Quantifiers: "[N] sample columns" / "five columns" / "10 articles"
     re.compile(
-        r"\b(some|sample|five|three|ten|\d+)\s+(?:\w+\s+){0,3}"
+        r"\b(some|sample|five|three|ten|several|many|\d+)\s+(?:\w+\s+){0,3}"
         r"(columns?|writings?|articles?|essays?)\b",
         re.IGNORECASE,
     ),
+    # "what have you written about" / "what did you write on" — but ONLY
+    # when "about/on" has no specific topic following it (catalog intent).
+    # Negative lookahead rejects "what did you write about Estrada" (topical).
     re.compile(
-        r"\bwhat\s+(have|did|do)\s+you\s+(write|written|wrote)\s+about\b",
+        r"\bwhat\s+(have|did|do)\s+you\s+(write|written|wrote)\s+(about|on)\b(?!\s+\w)",
         re.IGNORECASE,
     ),
+    # "what columns/articles/writings have you written"
     re.compile(
-        r"\bwhat\s+(columns?|articles?)\s+have\s+you\s+(written|wrote)\b",
+        r"\bwhat\s+(columns?|articles?|writings?|essays?|works?)\s+have\s+you\s+(written|wrote)\b",
+        re.IGNORECASE,
+    ),
+    # "tell me about your columns/writings" — catalog intent on plural noun
+    re.compile(
+        r"\btell\s+me\s+(?:more\s+)?about\s+(?:your\s+|the\s+)?"
+        r"(columns|writings|articles|essays|works)\b",
+        re.IGNORECASE,
+    ),
+    # "talk about your columns/writings"
+    re.compile(
+        r"\btalk\s+(?:to\s+me\s+)?about\s+(?:your\s+|the\s+)?"
+        r"(columns|writings|articles|essays|works)\b",
+        re.IGNORECASE,
+    ),
+    # "what are your (sample) columns/writings"
+    re.compile(
+        r"\bwhat\s+(are|were)\s+(?:your\s+|some\s+(?:of\s+your\s+)?|the\s+)?"
+        r"(?:sample\s+)?(columns|writings|articles|essays|works)\b",
+        re.IGNORECASE,
+    ),
+    # "describe your columns" / "any of your writings"
+    re.compile(
+        r"\b(describe|any\s+(?:of\s+)?(?:your\s+)?)"
+        r"(columns|writings|articles|essays|works)\b",
+        re.IGNORECASE,
+    ),
+    # "your columns" / "your writings" as a noun phrase under question intent
+    # — only if no specific topic word follows ("about X" / "on X" / "regarding X")
+    re.compile(
+        r"\byour\s+(columns|writings|articles|essays|works)\b"
+        r"(?!\s+(about|on|regarding|concerning|covering)\s+\w)",
         re.IGNORECASE,
     ),
 ]

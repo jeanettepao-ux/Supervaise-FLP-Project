@@ -57,7 +57,22 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Catalog mode · "list columns from year X" with clarification turn
+### 2026-05-08 · Catalog mode · expanded patterns (catch "tell me about your columns")
+
+User reported "Tell me about your columns." still falling back to refer-to-FLP — that natural phrasing wasn't in my catalog detection patterns. Added five new pattern families to cover common visitor phrasings, plus tightened the "what did you write about" pattern so it doesn't false-positive on topical queries.
+
+**New patterns:**
+- `tell me [more] about (your|the) <columns|writings|articles|essays|works>` (plural noun)
+- `talk [to me] about (your|the) <plural>`
+- `what are (your|some|the) [sample] <plural>`
+- `(describe|any of [your]) <plural>`
+- `your <plural>` as a noun phrase NOT followed by "about/on/regarding/concerning/covering <topic>"
+
+Pattern 3 ("what have you written about") tightened with a `(?!\s+\w)` negative lookahead — only matches when "about/on" has no specific topic following. So *"what did you write about"* triggers catalog (visitor browsing), but *"what did you write about Estrada"* stays topical (visitor asking about a specific case).
+
+13/13 inline test cases pass. Original 21/23 case set now passes the user-reported failure too.
+
+### 2026-05-08 · `00157d7` · Catalog mode · "list columns from year X" with clarification turn
 
 User reported: "Please provide five sample columns of CJ Panganiban" fell back to the FLP-referral line because retrieval found no chunks above threshold (and rightly so — chunks contain prose ABOUT topics, not catalog entries listing columns). Added a separate code path for catalog/list-style queries.
 
