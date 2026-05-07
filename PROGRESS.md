@@ -57,7 +57,24 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · TTS swap · edge-tts → Piper (local neural)
+### 2026-05-08 · Piper voice · `en_US-ryan-high` → `en_US-lessac-high`
+
+User reported `en_US-ryan-high` sounds flat / not engaging. Switched the default to **`en_US-lessac-high`** — a Piper voice trained on the Arthur Lessac vocal-arts method, with intentionally varied prosody. Sounds more engaged + still formal, better suited to CJ's persona.
+
+Changes:
+- `backend/tts.py` `DEFAULT_VOICE` → `en_US-lessac-high`. Module docstring's voice list re-ranked by "engaging-ness then formal".
+- `.env.example` `TTS_VOICE_PIPER` default now `en_US-lessac-high`. Comment expanded with 6 voice options ranked by character (Lessac, Alan, Bryce, Joe, Ryan, Norman).
+- `.env` (gitignored) updated to match.
+- New voice triggers a one-time ~50 MB download from `rhasspy/piper-voices` into `./models/piper/`. Verified live: synthesis works, ~30s first call (download + warm), then fast.
+
+To try a different voice, edit `.env`:
+```
+TTS_VOICE_PIPER=en_GB-alan-medium    # for British / BBC-presenter feel
+TTS_VOICE_PIPER=en_US-bryce-medium   # for warm conversational American
+```
+Each is documented in `.env.example`. Restart streamlit to pick up env changes; first use of a new voice triggers a ~30-60s download, then it's cached.
+
+### 2026-05-08 · `6eb5f4c` · TTS swap · edge-tts → Piper (local neural)
 
 User reported repeated `(TTS unavailable: edge-tts failed after N attempts: TimeoutError)` — Microsoft's TTS endpoint is intermittently rate-limiting / dropping connections. Decision was already in place: try Piper next. Done.
 
