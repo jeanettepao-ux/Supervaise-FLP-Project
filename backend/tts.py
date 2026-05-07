@@ -19,6 +19,11 @@ NOTE: en_US-lessac-* and en_US-amy-* are FEMALE despite unisex-sounding
 names — Arthur Lessac was a male voice coach, but the dataset was
 recorded by a female reader.
 
+Sentence pauses: piper-tts 1.4 dropped the SynthesisConfig.sentence_silence
+field, so we add pauses ourselves by splitting on sentence boundaries,
+synthesizing each piece, and writing silence frames between them.
+Configurable via TTS_SENTENCE_PAUSE env (seconds, default 0.4).
+
 Output format: 16-bit PCM WAV bytes (audio/wav). Streamlit's st.audio
 plays them natively. The previous edge-tts wrapper returned MP3 bytes —
 callers (WebAdapter, _synthesize_cached) now pass format="audio/wav".
@@ -28,6 +33,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import wave
 from functools import lru_cache
 from pathlib import Path
@@ -39,7 +45,27 @@ from piper import PiperVoice
 load_dotenv()
 
 DEFAULT_VOICE = "en_US-bryce-medium"
+DEFAULT_SENTENCE_PAUSE = 0.4  # seconds of silence between sentences
 _MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "piper"
+
+# Sentence splitter. Splits on . ! ? followed by whitespace + uppercase
+# letter, BUT only when at least 2 LOWERCASE letters precede the period
+# (avoids splitting on abbreviations like 'v.', 'Mr.', 'Dr.', 'Sr.' which
+# only have 1 lowercase letter — the rest are uppercase).
+#
+# Examples:
+#   "Estrada v. Desierto"       → 1 sentence (only 1 letter before "v.")
+#   "Mr. Smith said hi."        → 1 sentence (only "r" lowercase before "Mr.")
+#   "I wrote it. The case ruled" → 2 sentences ("it" = 2 lowercase)
+#
+# Known false-positive: "Plaintiff vs. Defendant" splits because "vs"
+# is 2 lowercase letters. Rare in our corpus; CJ uses "v." not "vs.".
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[a-z]{2}[.!?])\s+(?=[A-Z])")
+
+
+def _split_sentences(text: str) -> list[str]:
+    parts = _SENTENCE_SPLIT_RE.split(text.strip())
+    return [p.strip() for p in parts if p.strip()]
 
 
 class TTSFailure(RuntimeError):
@@ -84,18 +110,39 @@ def _voice() -> PiperVoice:
 
 
 def synthesize(text: str, voice: str | None = None) -> bytes:
-    """Synthesize text to 16-bit PCM WAV bytes via Piper. Local, no network
-    call at synthesis time, no retries needed (it doesn't fail on flaky
-    cloud endpoints because there is no cloud endpoint)."""
+    """Synthesize text to 16-bit PCM WAV bytes via Piper, with configurable
+    silence inserted between sentences for natural-sounding pacing."""
     if not text:
         return b""
+    pause_seconds = float(os.environ.get("TTS_SENTENCE_PAUSE", DEFAULT_SENTENCE_PAUSE))
     try:
         v = _voice()
+        sentences = _split_sentences(text)
+        if not sentences:
+            return b""
+
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav:
-            # synthesize_wav sets channels/sample-rate/sample-width on the
-            # wav file from the voice's config, then writes audio frames.
-            v.synthesize_wav(text, wav)
+            # First sentence: synthesize_wav sets WAV header (channels,
+            # sample rate, sample width) on the file AND writes audio.
+            v.synthesize_wav(sentences[0], wav)
+
+            if len(sentences) > 1 and pause_seconds > 0:
+                # Build silence at the WAV's parameters (mono 16-bit @ rate).
+                n_silence_frames = int(wav.getframerate() * pause_seconds)
+                silence_bytes = bytes(
+                    n_silence_frames * wav.getnchannels() * wav.getsampwidth()
+                )
+                for sentence in sentences[1:]:
+                    wav.writeframes(silence_bytes)
+                    # set_wav_format=False so it just appends frames without
+                    # trying to re-write the header (which is already set).
+                    v.synthesize_wav(sentence, wav, set_wav_format=False)
+            elif len(sentences) > 1:
+                # No pause requested — just stitch sentences end-to-end.
+                for sentence in sentences[1:]:
+                    v.synthesize_wav(sentence, wav, set_wav_format=False)
+
         return buf.getvalue()
     except Exception as e:  # noqa: BLE001
         raise TTSFailure(

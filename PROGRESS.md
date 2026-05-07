@@ -57,7 +57,23 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · DX · `restart.bat` + poll-based file watcher (hot-reload back)
+### 2026-05-08 · TTS · sentence pauses (0.4s between sentences)
+
+User requested pauses between sentences in the spoken output. piper-tts 1.4 dropped the `SynthesisConfig.sentence_silence` parameter, so we add the pauses ourselves: split text on sentence boundaries, synthesize each sentence in turn, write silence frames between them in the same WAV.
+
+**`backend/tts.py`:**
+- `_SENTENCE_SPLIT_RE` — regex split on `.!?` followed by whitespace + uppercase letter. Requires 2+ LOWERCASE letters before the punctuation so it doesn't split on abbreviations (`v.`, `Mr.`, `Dr.`, `Sr.`). 8/8 inline test cases pass, including the abbreviations and short-word sentence endings ("I wrote it.", "We are us.").
+- `synthesize()` rewritten:
+  - First sentence: `synthesize_wav(text, wav)` sets WAV header + writes audio.
+  - Each subsequent sentence: write `n_silence_frames` of zero bytes (using `wav.getframerate()` × pause seconds × channels × sample_width), then `synthesize_wav(text, wav, set_wav_format=False)` to append more audio without rewriting the header.
+  - If `TTS_SENTENCE_PAUSE=0`, sentences are stitched back-to-back (no pauses).
+- Configurable via `TTS_SENTENCE_PAUSE` env (default 0.4s). 0 disables pauses. 0.6+ for slower delivery.
+
+Verified: 3 sentences with 0.4s pauses produces audio 0.80s longer than no-pause version (matches expected 2 gaps × 0.4s).
+
+`.env.example` updated with `TTS_SENTENCE_PAUSE=0.4` and inline comments.
+
+### 2026-05-08 · `747cec8` · DX · `restart.bat` + poll-based file watcher (hot-reload back)
 
 User reported the dev cycle (Ctrl+C → wait 10s → `streamlit run app.py` → wait 10s for cold start) was slow. Added two changes to make iteration faster.
 
