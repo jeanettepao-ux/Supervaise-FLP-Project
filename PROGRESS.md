@@ -57,7 +57,24 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-08 · Piper voice fix · `en_US-lessac-high` (female!) → `en_US-bryce-medium`
+### 2026-05-08 · DX · `restart.bat` + poll-based file watcher (hot-reload back)
+
+User reported the dev cycle (Ctrl+C → wait 10s → `streamlit run app.py` → wait 10s for cold start) was slow. Added two changes to make iteration faster.
+
+**`restart.bat` at repo root:**
+- One double-click (or `restart.bat` from cmd) kills any process holding port 8501 and starts Streamlit fresh.
+- Uses `netstat -ano | findstr ":8501"` + `taskkill /F /PID …` — no PowerShell, no python parsing, no risk of killing unrelated python.exe processes.
+- Faster than the manual Ctrl+C waiting cycle when shutting down feels slow.
+
+**`.streamlit/config.toml`: `fileWatcherType = "none"` → `"poll"`:**
+- Re-enables Streamlit hot-reload on file save (back from May 5 disable when watchdog crashed). Polling sidesteps watchdog's failure mode — it doesn't open OS-level file watch handles, so it doesn't hit Windows' file-handle limits with our heavy dep tree.
+- Smoke-tested: server stays alive past 15s (the window where watchdog used to silently exit). Verified clean.
+- Trade-off: code changes detected within a couple of seconds (vs instant with watchdog). Fine for our dev loop.
+- If polling misbehaves on a teammate's machine, the comment in `config.toml` documents how to disable (back to `"none"` + use `restart.bat`).
+
+Combined effect: edit code → save → app auto-reloads in ~2s, no manual restart needed for most changes. Restart.bat is the fallback for cases where the warmup state needs flushing (env vars, voice changes, ChromaDB collection swaps).
+
+### 2026-05-08 · `8ec2c4c` · Piper voice fix · `en_US-lessac-high` (female!) → `en_US-bryce-medium`
 
 User caught my mistake: `en_US-lessac-high` is a **female** voice, despite Arthur Lessac being a male voice coach (the Piper dataset was recorded by a female reader of his method). Apologies for the bad recommendation. Switched to **`en_US-bryce-medium`** — verified male, conversational and warm.
 
