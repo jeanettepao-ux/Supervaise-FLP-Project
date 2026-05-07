@@ -57,7 +57,18 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-07 · STT default bumped from `base` → `small`
+### 2026-05-07 · `docs/pipeline.md` — full pipeline review document
+
+Comprehensive 18-section technical review of the pipeline as it stands today (post-`5a58664`). Covers high-level architecture, every component (frontend, STT, LLM, TTS, persona, embeddings, vector store, retrieval, orchestrator, robot adapter), KB composition by bucket, ingestion pipeline diagram, config files, env vars, Phase A→B cutover checklist, what's not yet wired (Steps 1.9 and 1.10), and known imperfections (oversized chapters, dead env vars, distance threshold, etc.).
+
+Three artifacts:
+- **`docs/pipeline.md`** — canonical markdown reference, viewable on GitHub, easy to edit
+- **`docs/pipeline_review_2026-05-07.pdf`** — PDF snapshot of the same content for offline review
+- **`scripts/build_pipeline_review_pdf.py`** — generator script (uses `reportlab` Platypus); regenerable any time after pipeline changes
+
+`reportlab==4.5.0` added to `requirements.txt` (one-time PDF generator dep).
+
+### 2026-05-07 · `5a58664` · STT default bumped from `base` → `small`
 
 User reported transcription quality was rough on `base` (e.g., "how much is it" → "hoe mad is it"). Per HANDOVER §2.4 the original plan was always `base` for dev speed and `small` for May-30 demo accuracy — we just hadn't bumped it.
 
