@@ -57,7 +57,13 @@ A visitor opens `http://localhost:8501`, sees the "CJ Panganiban — May 30 Demo
 
 ## Per-push history
 
-### 2026-05-07 · Chapter-level KB for "A Centenary of Justice" (Bounded-within-chapters strategy)
+### 2026-05-07 · STT default bumped from `base` → `small`
+
+User reported transcription quality was rough on `base` (e.g., "how much is it" → "hoe mad is it"). Per HANDOVER §2.4 the original plan was always `base` for dev speed and `small` for May-30 demo accuracy — we just hadn't bumped it.
+
+`.env.example` updated to `WHISPER_MODEL=small`. Local `.env` also bumped (gitignored, laptop-only). First transcription after restarting Streamlit will download the `small` model into `./models/` (~470 MB, one-time, ~30-60s on a normal connection). Subsequent transcriptions take ~3-5s instead of `base`'s ~1-2s, but words come out right.
+
+### 2026-05-07 · `14b9d23` · Chapter-level KB for "A Centenary of Justice" (Bounded-within-chapters strategy)
 
 User chose the **bounded-within-chapters** chunking strategy: chunks are ≤500 tokens AND chunks never cross chapter boundaries. Each chunk knows its parent chapter via metadata. Replaces the 2026-05-06 single-slug book ingest.
 
