@@ -564,6 +564,124 @@ One-double-click restart. Uses `netstat -ano | findstr ":8501"` + `taskkill /F /
 
 ---
 
+# Reference · Corpus & chunking details
+
+A live snapshot of the indexed corpus, queried directly from ChromaDB. Use this as a quick-look reference for what's actually in the knowledge base and how it's structured.
+
+## Chunks per source type
+
+| Source type | # Sources | # Chunks | Avg chunks/source |
+|---|---|---|---|
+| **Inquirer columns** | 65 | **199** | 3.1 |
+| **"A Centenary of Justice" book** | 20 chapters | **755** | 37.8 |
+| **Total** | **85** | **954** | — |
+
+Columns are short (~800 words → ~3 chunks each). Book chapters are long (~5,300 words on average → ~38 chunks each). The book represents **24%** of the sources but **79%** of the chunks by volume.
+
+## Per-chapter chunk counts (book)
+
+| Ch | Chunks | Words | Note |
+|---|---|---|---|
+| 1 | 5 | 845 | short opener (1 page detected) |
+| **2** | **142** | **27,556** | ⚠ inflated — photo-plate captions absorbed into Ch 2's blob |
+| 3 | 14 | 2,694 | normal |
+| 4 | 11 | 2,080 | normal |
+| 5 | 9 | 1,550 | normal |
+| 6 | 17 | 3,154 | normal |
+| 7 | 11 | 1,952 | normal |
+| 8 | 8 | 1,304 | normal |
+| 9 | 5 | 1,066 | normal |
+| 10 | 10 | 1,874 | normal |
+| 11 | 23 | 4,241 | normal |
+| 12 | 22 | 4,944 | normal |
+| 13 | 72 | 13,147 | major case (Estrada) |
+| 14 | 70 | 12,202 | major case (Death Penalty) |
+| 15 | 110 | 20,478 | largest case discussion |
+| 16 | 47 | 8,032 | substantial case |
+| 17 | 45 | 7,867 | substantial case |
+| **18** | **8** | **1,251** | ⚠ short — Ch 19 detection fired ~1k words too early |
+| 19 | 33 | 5,624 | normal |
+| **20** | **93** | **18,035** | ⚠ inflated — back matter / index absorbed |
+
+⚠ entries match the chapter-detection imperfections flagged in PROGRESS.md and `docs/pipeline.md`.
+
+## Are columns and book chapters stored as separate chunks?
+
+**Yes.** Every chunk is a distinct row in the same ChromaDB collection (`cjp_columns_dev`). Each chunk has:
+
+- **Deterministic ID** — `<slug>__c<NN>` format. Examples: `centenary-ch14__c023`, `flp-mission__c01`.
+- **Its own embedding vector** — 384-dim from `sentence-transformers/all-MiniLM-L6-v2`.
+- **Its own metadata** — `source_url`, `title`, `bucket`, `publication_date`, `chunk_index`, `chunk_count`, `word_count`, `citation_safe`, `ingested_at`, `embedder`.
+
+At retrieval time, a single query can pull a mix from both source types. For example, *"What did you write about FLP scholarships?"* might retrieve 2 column chunks + 1 book-chapter chunk in its top-5. They're independent records sharing one vector index.
+
+## Chunking strategy — same parameters for both source types
+
+Identical configuration in `ingest_columns.py`:
+
+```python
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+import tiktoken
+
+CHUNK_SIZE_TOKENS = 500       # ~375 words per chunk
+CHUNK_OVERLAP_TOKENS = 75     # ~15% overlap
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=CHUNK_SIZE_TOKENS,
+    chunk_overlap=CHUNK_OVERLAP_TOKENS,
+    length_function=lambda t: len(tiktoken.get_encoding("cl100k_base").encode(t)),
+    separators=["\n\n", "\n", ". ", " ", ""],
+)
+```
+
+**How `RecursiveCharacterTextSplitter` works:**
+
+1. Try to split on the first separator (`\n\n` = paragraph break). If all resulting pieces are ≤ 500 tokens, done.
+2. If any piece is too big, recursively re-split *that piece* on the next separator (`\n`, then `". "`, then `" "`, finally character-by-character).
+3. Adjacent chunks share **75 tokens of overlap** so a sentence/idea spanning a boundary appears in both — preserves context.
+
+**Tokenizer choice:** `cl100k_base` (OpenAI GPT-4's tokenizer). We use this even on the dev stack so token counts won't shift when we cutover to OpenAI embeddings (`text-embedding-3-small`).
+
+## One key difference: book chapters get a header prepended
+
+Added today in commit `bed579d`. **Every book-chapter chunk gets this header prepended to its text BEFORE embedding:**
+
+```
+[Excerpt from "A Centenary of Justice" by CJ Panganiban — Centenary, Ch.14: The Death Penalty.]
+
+(then the actual chapter content)
+```
+
+**Why:** meta-textual queries like *"give me context of chapter 14"* don't semantically match prose chunks about the death penalty without this header. The header puts the chapter identity into the **embedded vector**, not just the metadata. Vector search can now find Ch 14 chunks for Ch 14 queries.
+
+**Columns don't get a header** because:
+- Their titles already appear naturally at the start of the body (`# Title`).
+- A uniform "by CJ Panganiban" header on every column would just add noise (signal degradation per v2 handover §5 "do NOT inline byline" rule).
+
+For book chapters specifically, each chapter has a **unique** title — so the header is *distinguishing signal*, not uniform noise. The v2 rule doesn't apply.
+
+## Why the same chunk size for both source types
+
+We considered variable sizing (e.g., 300 tokens for short columns, 800 tokens for long book chapters) and rejected it. Reasons:
+
+- **Same vector space.** A 500-token column chunk and a 500-token book chunk embed comparably. Different sizes would produce vectors of slightly different "information density," skewing similarity scores when comparing across sources.
+- **Diversity guardrail predictability.** The retrieval layer caps chunks at 2 per source. With uniform chunk size, each query sees up to 2 × ~375 words ≈ 750 words of context per source, regardless of source type.
+- **Future-proof for the OpenAI cutover.** When we re-embed at 1,536-dim with `text-embedding-3-small`, same 500-token chunks. No re-chunking needed — just re-embedding.
+
+The 500-token choice is in the healthy band for production RAG (most systems use 500-800). We could bump to 700-800 if answers start feeling fragmented — that's a tunable, not an architectural change.
+
+## Numbers worth committing to memory
+
+- **954 chunks total** in `cjp_columns_dev`, ChromaDB at `./chroma_store/`.
+- **199 column chunks** + **755 book chunks**.
+- **Each chunk = 500 tokens** (~375 words) with 75-token overlap.
+- **Each chunk = 384-dim vector** in MiniLM-L6 space.
+- **Diversity guardrail = max 2 chunks per source** at retrieval time.
+- **Distance threshold = 0.55** (cosine distance, configurable via `RETRIEVAL_DISTANCE_THRESHOLD`).
+- **Top-k = 5** (configurable via `RETRIEVAL_TOP_K`).
+
+---
+
 # Postmortem · errors / wrong turns made today
 
 Worth flagging for the team. Mistakes are part of how we learned, but they're also where we should be more careful.
