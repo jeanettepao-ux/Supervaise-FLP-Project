@@ -78,13 +78,22 @@ KNOWN_MISHEARDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bSentenary\b", re.IGNORECASE), "Centenary"),
     (re.compile(r"\bSentinary\b", re.IGNORECASE), "Centenary"),
 
-    # Case parties
+    # Case parties — names CJ uses in his writings. Whisper often phonetically
+    # mangles Spanish-origin Filipino names. Add to this list as new
+    # mishearings are observed during testing.
     (re.compile(r"\bEstraja\b", re.IGNORECASE), "Estrada"),
     (re.compile(r"\bEstrana\b", re.IGNORECASE), "Estrada"),
     (re.compile(r"\bComelek\b", re.IGNORECASE), "Comelec"),
     (re.compile(r"\bComeleck\b", re.IGNORECASE), "Comelec"),
     (re.compile(r"\bDesyerto\b", re.IGNORECASE), "Desierto"),
-    (re.compile(r"\bDesyerto\b", re.IGNORECASE), "Desierto"),
+    (re.compile(r"\bCereto\b", re.IGNORECASE), "Desierto"),
+    (re.compile(r"\bSerrato\b", re.IGNORECASE), "Desierto"),
+    (re.compile(r"\bBengsen\b", re.IGNORECASE), "Bengson"),
+    (re.compile(r"\bBensan\b", re.IGNORECASE), "Bengson"),
+    (re.compile(r"\bSalonga\b", re.IGNORECASE), "Salonga"),  # canonical form (no-op)
+    (re.compile(r"\bSolanga\b", re.IGNORECASE), "Salonga"),
+    (re.compile(r"\bRobredo\b", re.IGNORECASE), "Robredo"),  # canonical
+    (re.compile(r"\bRobreda\b", re.IGNORECASE), "Robredo"),
 
     # Foundation phrasing
     (re.compile(r"\bFoundation\s+for\s+Liberty\s+Prosperity\b", re.IGNORECASE),
@@ -102,15 +111,21 @@ KNOWN_MISHEARDS: list[tuple[re.Pattern, str]] = [
 # capitalized non-trivial tokens. Tight cutoff (0.85) so common English
 # words don't accidentally get rewritten as domain terms.
 DOMAIN_TERMS: list[str] = [
-    # People
+    # People mentioned in CJ's corpus (helps Whisper bias toward correct
+    # spellings when audio is acoustically ambiguous)
     "Panganiban", "Estrada", "Desierto", "Bengson", "Cruz", "Perez",
+    "Salonga", "Robredo", "Marcos", "Duterte", "Aquino", "Arroyo",
+    "Davide", "Trump", "Ressa", "Diokno", "Teehankee", "Carpio",
+    "Kapunan", "Ynares", "Sandoval",
     # Organizations / acronyms
     "Foundation", "Inquirer", "Comelec", "Sandiganbayan", "Bayani",
+    "Tan", "Yan", "Kee",  # Tan Yan Kee Foundation
     # Topics / book / cases
     "Centenary", "Renaissance", "Doctrines", "Paradigms", "Maestra",
     "Mediation", "Firestone", "Ceramics", "Liberty", "Prosperity",
+    "Asean", "Inquirer", "Cathedral",
     # Court terms
-    "Supreme", "Court", "Justice", "Judiciary",
+    "Supreme", "Court", "Justice", "Judiciary", "Sandiganbayan",
 ]
 
 _FUZZY_CUTOFF = 0.85
