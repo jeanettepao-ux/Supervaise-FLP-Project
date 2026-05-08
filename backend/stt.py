@@ -94,6 +94,17 @@ KNOWN_MISHEARDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bSolanga\b", re.IGNORECASE), "Salonga"),
     (re.compile(r"\bRobredo\b", re.IGNORECASE), "Robredo"),  # canonical
     (re.compile(r"\bRobreda\b", re.IGNORECASE), "Robredo"),
+    (re.compile(r"\bLenn?y\s+Robert[oa]\b", re.IGNORECASE), "Leni Robredo"),
+    (re.compile(r"\bLeni\s+Robert[oa]\b", re.IGNORECASE), "Leni Robredo"),
+    (re.compile(r"\bDutert\b", re.IGNORECASE), "Duterte"),
+
+    # Common-word mishearings from observed sessions
+    # 'Marshall law' (homophone) -> 'Martial law'
+    (re.compile(r"\bMarshall\s+law\b", re.IGNORECASE), "Martial law"),
+    # 'defaulation' / 'defilation' / 'defultation' -> 'Foundation'
+    (re.compile(r"\bdefaul[ta]tion\b", re.IGNORECASE), "Foundation"),
+    (re.compile(r"\bdefilation\b", re.IGNORECASE), "Foundation"),
+    (re.compile(r"\bdefultation\b", re.IGNORECASE), "Foundation"),
 
     # Foundation phrasing
     (re.compile(r"\bFoundation\s+for\s+Liberty\s+Prosperity\b", re.IGNORECASE),

@@ -50,6 +50,124 @@ DEFAULT_CLAUSE_PAUSE = 0.18    # seconds between clauses inside a long sentence
 DEFAULT_LONG_SENTENCE_WORDS = 14  # threshold to trigger clause-level breaks
 _MODELS_DIR = Path(__file__).resolve().parent.parent / "models" / "piper"
 
+
+# =============================================================
+# Pre-synthesis text normalization
+# =============================================================
+# Piper / eSpeak phonemizer makes some predictable mistakes on:
+#  - Filipino names ("Duterte" pronounced "Dutert" — silent final 'e')
+#  - Compact suffixes ("Jr." read as "J R" instead of "Junior")
+#  - Currency notation ("P100,000" read as "P-100,000" not "100,000 pesos")
+#  - 4-digit numbers in year contexts (1581 read as "one thousand five
+#    hundred eighty-one" instead of "fifteen eighty-one")
+#  - All-caps acronyms ("FLP" pronounced as one syllable, not letters)
+#  - Compound proper nouns ("Mapa High" elided to "mapaha")
+# We pre-process text before handing it to Piper to fix these.
+
+# Phonetic respellings — for names Piper otherwise mispronounces.
+# Use mixed case (no all-caps stretches) so the acronym-spacing rule
+# doesn't shred them. Add new entries as we observe them; the UI shows
+# the original spelling, only the synthesized audio uses these.
+_PHONETIC_SPELLINGS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bDuterte\b"), "Doo terr teh"),    # silent-e fix
+    (re.compile(r"\bMapa\s+High\b"), "Mah pah High"),
+]
+
+# Suffix expansions — full word instead of abbreviated letters.
+_SUFFIX_EXPANSIONS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bMr\.(?=\s|$)"), "Mister"),
+    (re.compile(r"\bMrs\.(?=\s|$)"), "Missus"),
+    (re.compile(r"\bMs\.(?=\s|$)"), "Miss"),
+    (re.compile(r"\bDr\.(?=\s|$)"), "Doctor"),
+    (re.compile(r"\bJr\.(?=\s|$)"), "Junior"),
+    (re.compile(r"\bSr\.(?=\s|$)"), "Senior"),
+]
+
+# Currency — Philippine peso notation. CJ writes 'P200,000' or 'P50 million'.
+# Run BEFORE acronym spacing (the leading 'P' would otherwise be stripped).
+_CURRENCY_EXPANSIONS: list[tuple[re.Pattern, str]] = [
+    (
+        re.compile(
+            r"\bP[-\s]*([\d,]+(?:\.\d+)?)\s+(million|billion|thousand)\b",
+            re.IGNORECASE,
+        ),
+        r"\1 \2 pesos",
+    ),
+    (re.compile(r"\bP[-\s]*([\d,]+(?:\.\d+)?)\b"), r"\1 pesos"),
+    (re.compile(r"\b₱[-\s]*([\d,]+(?:\.\d+)?)\b"), r"\1 pesos"),
+]
+
+# Year reading — speak 4-digit years naturally.
+_YEAR_RE = re.compile(r"\b(1\d{3}|20\d{2})\b")
+
+_ONES = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+    "sixteen", "seventeen", "eighteen", "nineteen",
+]
+_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
+         "eighty", "ninety"]
+
+
+def _num_to_words(n: int) -> str:
+    if n < 20:
+        return _ONES[n]
+    if n < 100:
+        if n % 10 == 0:
+            return _TENS[n // 10]
+        return _TENS[n // 10] + "-" + _ONES[n % 10]
+    return str(n)  # fallback for >=100; not expected in our use
+
+
+def _expand_year(match: "re.Match[str]") -> str:
+    year = int(match.group(0))
+    # 2000-2009: "two thousand", "two thousand five", etc.
+    if 2000 <= year <= 2009:
+        return "two thousand" if year == 2000 else f"two thousand {_num_to_words(year - 2000)}"
+    # All other 4-digit years: split into two halves and read each.
+    a, b = year // 100, year % 100
+    if b == 0:
+        return f"{_num_to_words(a)} hundred"
+    if 0 < b < 10:
+        # 1901 -> "nineteen oh one", 1808 -> "eighteen oh eight"
+        return f"{_num_to_words(a)} oh {_num_to_words(b)}"
+    return f"{_num_to_words(a)} {_num_to_words(b)}"
+
+
+# Acronym spacing — pronounce 2-5 all-caps letter sequences as separate
+# letters (FLP -> F L P, ICC -> I C C). Whitelist for acronyms commonly
+# pronounced as one word (ASEAN, NATO).
+_ACRONYM_RE = re.compile(r"\b([A-Z]{2,5})\b")
+_ACRONYM_WORDS_SAY_AS_WORD = {"ASEAN", "NATO", "AIDS", "OPEC"}
+
+
+def _space_acronym(match: "re.Match[str]") -> str:
+    word = match.group(0)
+    if word in _ACRONYM_WORDS_SAY_AS_WORD:
+        return word
+    return " ".join(word)
+
+
+def _normalize_for_speech(text: str) -> str:
+    """Pre-synthesis text transforms for natural Piper pronunciation.
+    Applied to the text BEFORE sentence splitting and audio synthesis.
+    Does not affect what visitors see in the chat UI — only what they hear."""
+    out = text
+    # Phonetic respellings first (before acronym spacing might break them)
+    for pattern, repl in _PHONETIC_SPELLINGS:
+        out = pattern.sub(repl, out)
+    # Suffix expansions (Mr. -> Mister, etc.)
+    for pattern, repl in _SUFFIX_EXPANSIONS:
+        out = pattern.sub(repl, out)
+    # Currency (P100,000 -> 100,000 pesos) — BEFORE acronyms strip leading 'P'
+    for pattern, repl in _CURRENCY_EXPANSIONS:
+        out = pattern.sub(repl, out)
+    # Year reading (1581 -> fifteen eighty-one)
+    out = _YEAR_RE.sub(_expand_year, out)
+    # Acronym spacing (FLP -> F L P) — last, so prior rules already ran
+    out = _ACRONYM_RE.sub(_space_acronym, out)
+    return out
+
 # Sentence splitter — see Fix 1 in catalog.py for the same regex shape.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[a-z]{2}[.!?])\s+(?=[A-Z])")
 # Clause splitter — splits on comma or semicolon followed by whitespace.
@@ -142,7 +260,10 @@ def synthesize(text: str, voice: str | None = None) -> bytes:
         return b""
     try:
         v = _voice()
-        segments = _segments_with_pauses(text)
+        # Apply pre-synthesis normalization (phonetic spellings, currency,
+        # years, suffixes, acronym spacing) BEFORE sentence splitting.
+        normalized = _normalize_for_speech(text)
+        segments = _segments_with_pauses(normalized)
         if not segments:
             return b""
 
